@@ -1,0 +1,46 @@
+# Secretos
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials*.json
+service-account*.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# Django
+staticfiles/
+media/
+*.sqlite3
+
+# Node (panel, Fase 6)
+node_modules/
+.next/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+
+# Workers / artefactos locales
+.worktrees/
+tmp/
+
+# Editor / SO
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

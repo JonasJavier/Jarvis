@@ -1,0 +1,113 @@
+# Manifest de ejemplo. Un archivo por proyecto de cliente.
+# Se carga con `manage.py load_manifests` (Fase 1A) y se valida con un esquema estricto.
+# No incluir secretos aquí: solo identificadores y políticas.
+version: 1
+
+client:
+  id: example-client
+  name: Example Client
+  contacts:                       # identificación por coincidencia exacta (ADR-010)
+    - type: whatsapp
+      value: "+10000000000"
+    - type: email
+      value: soporte@example.com
+
+project:
+  id: example
+  name: Example Project
+  repository: my-org/example
+  default_branch: main
+  timezone: America/Santo_Domingo
+
+environments:
+  staging:
+    auto_deploy: true
+  production:
+    auto_deploy: false
+    requires_approval: true
+
+contract:
+  maintenance_included:
+    - bug_fix
+    - minor_update
+    - monitoring
+    - backups
+    - non_breaking_dependency_update
+  maintenance_excluded:
+    - new_feature
+    - redesign
+    - new_external_provider
+    - large_migration
+  sla:
+    critical_first_response_minutes: 30
+    normal_first_response_minutes: 240
+
+maintenance:
+  enabled: true
+  schedule: "0 3 1 * *"
+  tasks:
+    - run_tests
+    - dependency_check
+    - security_scan
+    - endpoint_health
+    - error_review
+    - backup_verification
+    - monthly_report
+
+commands:
+  install: ["uv sync"]
+  test: ["pytest"]
+  lint: ["ruff check ."]
+  typecheck: ["mypy ."]
+
+policy:                           # acción no listada => forbidden
+  autonomous:
+    - read_repository
+    - read_sanitized_logs
+    - run_tests
+    - run_linter
+    - modify_worktree
+    - create_branch
+    - create_draft_pr
+    - deploy_staging
+    - draft_client_reply
+  requires_approval:
+    - merge_default_branch
+    - deploy_production
+    - database_migration
+    - change_iam
+    - rotate_credentials
+    - destructive_database_operation
+    - financial_operation
+    - quote_new_feature
+  forbidden:
+    - expose_secret
+    - disable_audit_logging
+    - access_other_client_projects
+    - modify_ci
+
+budget:
+  max_ai_usd_per_run: 3.00
+  max_ai_usd_per_day: 10.00
+  max_ai_usd_per_month: 75.00
+
+agent:
+  max_turns: 12
+  timeout_seconds: 2400
+  max_retries: 1
+
+communications:
+  auto_reply:
+    allowed:
+      - acknowledgement
+      - request_for_debug_information
+      - status_update
+    approval_required:
+      - pricing
+      - deadlines
+      - contract_changes
+      - compensation
+  escalation_keywords:
+    - "hablar con jonas"
+    - "necesito una persona"
+    - "urgente"
