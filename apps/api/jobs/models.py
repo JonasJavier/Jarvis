@@ -26,6 +26,13 @@ class JobStatus(models.TextChoices):
     CANCELLED = "cancelled"
 
 
+class CIStatus(models.TextChoices):
+    UNKNOWN = ""
+    PENDING = "pending"
+    SUCCESS = "success"
+    FAILURE = "failure"
+
+
 class Job(models.Model):
     ticket = models.ForeignKey("tickets.Ticket", on_delete=models.PROTECT, related_name="jobs")
     project = models.ForeignKey("projects.Project", on_delete=models.PROTECT, related_name="jobs")
@@ -34,6 +41,14 @@ class Job(models.Model):
     attempts = models.PositiveSmallIntegerField(default=0)
     max_retries = models.PositiveSmallIntegerField()
     correlation_id = models.CharField(max_length=64, db_index=True)
+    # Filled by the RepoBroker once the Draft PR exists (Phase 2).
+    branch = models.CharField(max_length=255, blank=True)
+    head_sha = models.CharField(max_length=64, blank=True, db_index=True)
+    pr_number = models.PositiveIntegerField(null=True, blank=True)
+    pr_url = models.URLField(max_length=500, blank=True)
+    ci_status = models.CharField(
+        max_length=16, choices=CIStatus.choices, default=CIStatus.UNKNOWN, blank=True
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

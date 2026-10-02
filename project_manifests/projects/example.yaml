@@ -7,7 +7,7 @@ project:
   id: example
   client_id: example-client
   name: Example Project
-  repository: my-org/example
+  repository: jonasjavier/jarvis-sandbox
   default_branch: main
 
 environments:

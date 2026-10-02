@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     "approvals",
     "tickets",
     "jobs",
+    "integrations",
 ]
 
 MIDDLEWARE = [
@@ -135,3 +136,11 @@ LOGGING = {
     "handlers": {"console": {"class": "logging.StreamHandler", "formatter": "plain"}},
     "root": {"handlers": ["console"], "level": env("DJANGO_LOG_LEVEL", "INFO")},
 }
+
+# GitHub App (Phase 2). Secrets come from the environment; empty means "not configured" and every
+# webhook is rejected. The private key may be passed with literal "\\n" sequences.
+GITHUB_APP_ID = env("GITHUB_APP_ID", "")
+GITHUB_APP_PRIVATE_KEY = env("GITHUB_APP_PRIVATE_KEY", "")
+GITHUB_WEBHOOK_SECRET = env("GITHUB_WEBHOOK_SECRET", "")
+GITHUB_API_URL = env("GITHUB_API_URL", "https://api.github.com")
+JARVIS_REPO_HOST = env("JARVIS_REPO_HOST")  # fake | github

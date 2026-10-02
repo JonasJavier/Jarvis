@@ -21,7 +21,7 @@ sesión. Los modelos y migraciones son incrementales: cada fase crea solo lo que
 | 0 | Documentación y fundamentos | ✅ Completada | — |
 | 1A | Scaffold del control plane | ✅ Completada y revisada | 5–8 h |
 | 1B | Núcleo de seguridad: política, aprobaciones, presupuesto, idempotencia | ✅ Completada — pendiente revisión del owner | 10–14 h |
-| 2 | Integración GitHub App | ⏳ Pendiente | 15–25 h |
+| 2 | Integración GitHub App | ✅ Código completo — pendiente prueba real y revisión del owner | 15–25 h |
 | 3 | Coding worker local (mock → Claude) | ⏳ Pendiente | 20–35 h |
 | 4 | Despliegue de Jarvis en producción (Railway) | ⏳ Pendiente — guía recibida ([railway.md](railway.md)) | 8–14 h |
 | 5 | WhatsApp Cloud API | ⏳ Pendiente | 12–20 h |
@@ -194,6 +194,41 @@ y validación de manifests en verde. Implementado:
 **Criterios de salida:** un job manual crea branch + commit trivial + Draft PR en el repo de prueba;
 repetir el job no duplica branch ni PR; el resultado de CI se refleja en el `Ticket`; webhook con
 firma inválida ⇒ 401 auditado; repo sin protección ⇒ Jarvis se niega a operar.
+
+**Resultado (2026-10-02):** código completo y verificado contra el `FakeRepoHost` y una API de
+GitHub simulada: 230 tests (42 nuevos), cobertura 93 %, ruff, mypy estricto y migraciones en
+verde. Implementado en la app `integrations`:
+- `RepositoryConnection` (instalación ↔ repo ↔ proyecto), creada por los eventos `installation` /
+  `installation_repositories` o con `manage.py connect_repository`.
+- `RepoHost` (`FakeRepoHost`, `GitHubAppHost`): tokens de instalación limitados a un repo y a
+  permisos explícitos, verificados en la respuesta (un token más amplio de lo pedido se descarta);
+  commits vía Git Data API a partir de un `ChangeSet` (ADR-031); PRs siempre en borrador.
+- `RepoBroker`: política (`create_branch`, `request_draft_pr` autónomas), preflight de Rulesets
+  (PR obligatorio, required checks, sin bypass para la App), guard de rutas protegidas, branch
+  determinista `jarvis/{ticket}-{job}` reutilizada si existe, PR abierto consultado antes de crear;
+  `worker_token()` solo de lectura.
+- Webhook `POST /webhooks/github`: HMAC `X-Hub-Signature-256` (sin secreto configurado ⇒ todo
+  rechazado), dedupe por `X-GitHub-Delivery`, solo se guarda un resumen tipado del payload, 202 y
+  procesamiento vía `TaskQueue`. Eventos `pull_request`, `check_suite`, `check_run`: resultado de
+  CI en `Job.ci_status` y en el `Ticket` (`pull_request → ci`; fallo ⇒ `investigating`).
+- `manage.py github_smoke --project X --ref N`: el job manual del criterio de salida, idempotente.
+
+**Prueba real pendiente (requiere al owner):** crear la GitHub App privada con los permisos de
+permissions-and-approvals.md, instalarla solo en un repo de prueba con Ruleset (PR obligatorio,
+required check, sin bypass), configurar `JARVIS_REPO_HOST=github`, `GITHUB_APP_ID`,
+`GITHUB_APP_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET` y un túnel, y ejecutar `connect_repository` +
+`github_smoke`. El código no se da por validado en producción hasta entonces.
+
+**Pendientes detectados (para fases posteriores)**
+- 3: el worker exporta sus cambios como `ChangeSet` (diff del worktree) para el broker; el token de
+  `worker_token()` se inyecta en el sandbox; `Job.head_sha` alimenta el `JobSpec`.
+- 4: `InProcessQueue(handler=…)` procesa en el mismo request; la cola real llega con la Fase 4.
+- 6: `StagingTrigger` mueve el ticket `ci → staging`; merge autónomo (`merge_pull_request`) y
+  comentarios en el PR.
+- 2 (opcional, no hecho): tickets desde `issues`; requiere decidir cómo identificar al autor de un
+  issue (no es un `Contact`).
+- Preflight: se evalúa en cada publicación; falta re-evaluarlo periódicamente y alertar si un repo
+  pierde su protección (Fase 9).
 
 ---
 

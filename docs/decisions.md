@@ -308,3 +308,23 @@ aprobar o rechazar un `Approval`; solo `control_plane`, `deployer` y `staging_tr
 solicitar o consumir uno.
 **Consecuencias:** ningún endpoint acepta anónimos; el panel de la Fase 6 solo tiene que aportar un
 verificador real y las vistas.
+
+## ADR-031 — Cambios como `ChangeSet` vía Git Data API; webhooks con resumen tipado
+**Estado:** Aceptada (2026-10-02)
+
+**Contexto:** architecture.md hablaba de un `GitBundle` para que el worker entregue sus cambios al
+RepoBroker. Eso exigiría `git` y un clon en el control plane.
+**Decisión:** el broker recibe un `ChangeSet` (commit base + lista de archivos a escribir o borrar +
+mensaje) y `GitHubAppHost` lo convierte en commit con la Git Data API (blobs → tree → commit → ref)
+usando su propio token de instalación. El guard de rutas protegidas se aplica a las rutas del
+`ChangeSet` antes de tocar el host. El nombre de rama es determinista (`jarvis/{ticket}-{job}`); si
+existe se reutiliza; antes de crear un PR se consulta si ya hay uno abierto para esa rama.
+Los tokens de instalación se piden con `repositories` y `permissions` explícitos y la respuesta se
+verifica: si GitHub devuelve más permisos o más repos de los pedidos, el token se descarta.
+Del payload de cada webhook solo se persiste un resumen tipado (`summarize`), nunca el cuerpo
+completo; la firma HMAC es la única autenticación y sin secreto configurado se rechaza todo.
+Hasta la Fase 4, `InProcessQueue` puede ejecutar el handler en el mismo proceso al encolar; los
+fallos del handler se auditan (`task.failed`) y el evento ya persistido puede reprocesarse.
+**Consecuencias:** el control plane no necesita `git` ni espacio de clonado para publicar; el worker
+(Fase 3) exporta su diff como `ChangeSet`. Cambios binarios grandes pasan por blobs base64 (límite
+de GitHub ~100 MiB por archivo, muy por encima del límite del worker).

@@ -9,9 +9,11 @@ dependencies = [
     "django>=6.1.1",
     "django-stubs-ext>=6.1.1",
     "djangorestframework>=3.18.1",
+    "httpx>=0.28.1",
     "phonenumbers>=9.0.40",
     "psycopg[binary]>=3.3.6",
     "pydantic>=2.13.5",
+    "pyjwt[crypto]>=2.15.1",
     "pyyaml>=6.0.3",
 ]
 
@@ -39,7 +41,7 @@ ignore = ["RUF012"]  # Django Meta/admin class attributes are idiomatic lists
 [tool.ruff.lint.isort]
 known-first-party = [
     "config", "clients", "projects", "policies", "audit",
-    "idempotency", "budgets", "approvals", "tickets", "jobs", "llm", "identity",
+    "idempotency", "budgets", "approvals", "tickets", "jobs", "llm", "identity", "integrations",
 ]
 
 [tool.mypy]
