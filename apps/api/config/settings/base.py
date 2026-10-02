@@ -48,6 +48,11 @@ INSTALLED_APPS = [
     "clients",
     "projects",
     "policies",
+    "idempotency",
+    "budgets",
+    "approvals",
+    "tickets",
+    "jobs",
 ]
 
 MIDDLEWARE = [
@@ -96,15 +101,30 @@ USE_TZ = True
 STATIC_URL = "static/"
 STATIC_ROOT = REPO_DIR / "staticfiles"
 
-# No API endpoint is reachable until an authentication backend exists (Phase 1B).
+# Every API caller is verified by the configured IdentityVerifier; nobody is anonymous.
 REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES": [],
+    "DEFAULT_AUTHENTICATION_CLASSES": ["identity.authentication.BearerIdentityAuthentication"],
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
     "UNAUTHENTICATED_USER": None,
 }
 
 # Versioned manifests are the source of truth for critical policy (ADR-017).
 JARVIS_MANIFESTS_DIR = Path(env("JARVIS_MANIFESTS_DIR", str(REPO_DIR / "project_manifests")))
+
+# Versioned price catalog (cost-controls.md): never hardcode a tariff.
+JARVIS_PRICING_FILE = Path(env("JARVIS_PRICING_FILE", str(REPO_DIR / "pricing" / "pricing.yaml")))
+
+# Identity: dotted path of the IdentityVerifier implementation; owner recognised by email allowlist.
+JARVIS_IDENTITY_VERIFIER = env("JARVIS_IDENTITY_VERIFIER")
+JARVIS_OWNER_EMAILS = env_list("JARVIS_OWNER_EMAILS")
+
+# LLM access goes through LLMGateway only. Models are configuration, resolved by role.
+JARVIS_LLM_PROVIDER = env("JARVIS_LLM_PROVIDER")
+JARVIS_LLM_MODELS = {
+    "cheap": env("JARVIS_LLM_MODEL_CHEAP"),
+    "coding": env("JARVIS_LLM_MODEL_CODING"),
+    "reasoning": env("JARVIS_LLM_MODEL_REASONING"),
+}
 
 LOGGING = {
     "version": 1,

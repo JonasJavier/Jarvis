@@ -21,6 +21,7 @@ from pydantic import (
 )
 
 from clients.normalization import ContactKind, ContactNormalizationError, normalize_contact
+from policies.actions import ACTION_NAMES
 
 # Code-level ceiling (ADR-022): client projects can never reach level 4, whatever global.yaml says.
 MAX_AUTONOMY_LEVEL = 4
@@ -50,6 +51,8 @@ class GlobalBudgets(Strict):
     daily_usd: Money
     monthly_usd: Money
     alert_thresholds_pct: list[Annotated[StrictInt, Field(ge=1, le=100)]]
+    # From this percentage of any scope, low-priority paid work is blocked (cost-controls.md).
+    low_priority_block_pct: Annotated[StrictInt, Field(ge=1, le=100)]
 
     @model_validator(mode="after")
     def check(self) -> Self:
@@ -59,6 +62,15 @@ class GlobalBudgets(Strict):
         if not thresholds or thresholds != sorted(set(thresholds)) or thresholds[-1] != 100:
             raise ValueError("alert_thresholds_pct must be strictly increasing and end at 100")
         return self
+
+
+def _known_actions(values: list[str]) -> list[str]:
+    unknown = sorted(set(values) - ACTION_NAMES)
+    if unknown:
+        raise ValueError(f"unknown actions (not in the code catalog): {unknown}")
+    if len(values) != len(set(values)):
+        raise ValueError("duplicate action")
+    return values
 
 
 class GlobalLimits(Strict):
@@ -127,6 +139,11 @@ class GlobalManifest(Strict):
         except (ZoneInfoNotFoundError, ValueError) as exc:
             raise ValueError(f"unknown timezone: {value}") from exc
         return value
+
+    @field_validator("forbidden")
+    @classmethod
+    def forbidden_in_catalog(cls, value: list[str]) -> list[str]:
+        return _known_actions(value)
 
 
 # --- clients/<id>.yaml ---------------------------------------------------------------------
@@ -263,6 +280,11 @@ class Commands(Strict):
 class Policy(Strict):
     autonomy_level: AutonomyLevel
     restrict: list[Identifier] = []
+
+    @field_validator("restrict")
+    @classmethod
+    def restrict_in_catalog(cls, value: list[str]) -> list[str]:
+        return _known_actions(value)
 
 
 class ProjectBudget(Strict):

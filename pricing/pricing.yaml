@@ -1,0 +1,30 @@
+# Catálogo de precios versionado (cost-controls.md). Nunca se hardcodean tarifas en el código.
+# Cada entrada de UsageLedger guarda la `version` usada para calcular su coste.
+#
+# Fase 1B: solo el proveedor `fake` (tests y desarrollo). Las tarifas reales de Anthropic
+# (Fase 3) y de Meta WhatsApp (Fase 5) se añaden al activar cada fase, verificadas contra la
+# documentación oficial del proveedor en ese momento.
+version: "2026.10-fake"
+
+llm:                              # USD por millón de tokens
+  fake:
+    fake-small:
+      input_per_mtok: 1.00
+      output_per_mtok: 5.00
+      cache_read_per_mtok: 0.10
+      cache_write_per_mtok: 1.25
+    fake-coding:
+      input_per_mtok: 3.00
+      output_per_mtok: 15.00
+      cache_read_per_mtok: 0.30
+      cache_write_per_mtok: 3.75
+    fake-large:
+      input_per_mtok: 15.00
+      output_per_mtok: 75.00
+      cache_read_per_mtok: 1.50
+      cache_write_per_mtok: 18.75
+
+units:                            # USD por unidad (mensaje, llamada)
+  fake:
+    whatsapp:
+      per_unit: 0.05

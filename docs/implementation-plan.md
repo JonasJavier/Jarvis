@@ -19,8 +19,8 @@ sesión. Los modelos y migraciones son incrementales: cada fase crea solo lo que
 | Fase | Nombre | Estado | Estimación |
 |---|---|---|---|
 | 0 | Documentación y fundamentos | ✅ Completada | — |
-| 1A | Scaffold del control plane | ✅ Completada — pendiente revisión del owner | 5–8 h |
-| 1B | Núcleo de seguridad: política, aprobaciones, presupuesto, idempotencia | ⏳ Pendiente | 10–14 h |
+| 1A | Scaffold del control plane | ✅ Completada y revisada | 5–8 h |
+| 1B | Núcleo de seguridad: política, aprobaciones, presupuesto, idempotencia | ✅ Completada — pendiente revisión del owner | 10–14 h |
 | 2 | Integración GitHub App | ⏳ Pendiente | 15–25 h |
 | 3 | Coding worker local (mock → Claude) | ⏳ Pendiente | 20–35 h |
 | 4 | Despliegue de Jarvis en producción (Railway) | ⏳ Pendiente — guía recibida ([railway.md](railway.md)) | 8–14 h |
@@ -135,6 +135,38 @@ ejecutará en GitHub con el primer push.
 
 **Criterios de salida:** todos los tests de seguridad en verde; cobertura ≥ 90 % en `policies`,
 `budgets`, `approvals`, `idempotency`.
+
+**Resultado (2026-10-02):** criterios cumplidos localmente: 188 tests (114 nuevos), cobertura
+96 % total y ≥ 91 % en cada módulo exigido; ruff, formato, mypy estricto, `makemigrations --check`
+y validación de manifests en verde. Implementado:
+- Apps nuevas `idempotency`, `budgets`, `approvals`, `tickets`, `jobs`; paquetes `llm` e `identity`.
+- `policies/actions.py`: catálogo de acciones con clase de riesgo y techos por actor (ADR-027);
+  `policies/engine.py`: `PolicyEngine` con las cinco entradas en orden de prioridad, fail-closed y
+  bloqueo por drift (`project_drift`). `GlobalPolicy` materializa `global.yaml` (ADR-026).
+- `ApprovalService` (digest, single-use ligado a la idempotency key, expiración, invalidación por
+  cambio de operación o de política, solo el owner decide, ningún actor LLM pide ni consume).
+- `BudgetGuard` con reservas `global → client → project → job` en orden fijo, conciliación en
+  `UsageLedger`, umbrales auditados, bloqueo de baja prioridad y circuit breaker (ADR-029);
+  catálogo de precios en `pricing/pricing.yaml` (ADR-028).
+- `LLMGateway` + `FakeLLMProvider` (reserva → invocación → conciliación; rechaza prompts con
+  secretos configurados). `IdentityVerifier` + `FakeVerifier` + autenticación Bearer en DRF (ADR-030).
+- Intake idempotente (`InboundEvent` único por `(source, external_id)`, ticket por
+  `ticket:{source}:{external_id}`), `ProjectResolver`, máquinas de estado de `Ticket` y `Job`,
+  `TaskQueue`/`InProcessQueue`, admin de solo lectura para todos los modelos operativos.
+
+**Pendientes detectados (para fases posteriores)**
+- 2: `allowed_actions` del `JobSpec` debe salir de `PolicyEngine.autonomous_actions(coding_worker, …)`.
+- 3: `AnthropicProvider` detrás de `LLMProvider`; añadir tarifas reales a `pricing/pricing.yaml`
+  verificadas contra la documentación oficial; coste real por `JobRun` (`JobRun.cost_usd`).
+- 4: tarea periódica para `BudgetGuard.expire_stale()` y `ApprovalService.expire_pending()` (hoy se
+  invocan bajo demanda; el mecanismo de cron se decide en la Fase 4).
+- 5/6: las alertas de umbral (80 %) y de `NeedsIdentification` solo generan `AuditEvent`; el aviso al
+  owner por WhatsApp/panel llega con esas fases. El panel decide aprobaciones vía `ApprovalService`.
+- 6: `IdentityVerifier` real (Firebase u otro); `JARVIS_OWNER_EMAILS` como allowlist del owner.
+- 9: `production_ops_per_hour` y `concurrent_ai_jobs` están materializados pero aún no se aplican
+  (no hay operaciones de producción ni workers todavía).
+- El endpoint REST de aprobaciones no existe aún: `ApprovalService` se usa desde código/tests hasta
+  que el panel (Fase 6) lo exponga.
 
 ---
 

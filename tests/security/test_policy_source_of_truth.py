@@ -10,19 +10,42 @@ from django.db import IntegrityError, transaction
 from django.test import RequestFactory
 from django.utils import timezone
 
+from approvals.models import Approval
 from audit.models import AuditEvent
+from budgets.models import Budget, BudgetReservation, UsageLedger
 from clients.admin import ContactInline
 from clients.models import Client, Contact
+from idempotency.models import IdempotencyRecord
+from jobs.models import Job, JobRun
 from policies.manifests.loader import ManifestError, load_bundle
 from policies.manifests.materialize import apply_bundle
-from policies.models import ContractPolicy
+from policies.models import ContractPolicy, GlobalPolicy
 from projects.models import Project
+from tickets.models import InboundEvent, Ticket
 
 pytestmark = pytest.mark.django_db
 
 
-@pytest.mark.parametrize("model", [Client, Project, ContractPolicy, AuditEvent])
-def test_admin_cannot_add_change_or_delete_policy_data(model: type) -> None:
+@pytest.mark.parametrize(
+    "model",
+    [
+        Client,
+        Project,
+        ContractPolicy,
+        GlobalPolicy,
+        AuditEvent,
+        Approval,
+        Budget,
+        BudgetReservation,
+        UsageLedger,
+        IdempotencyRecord,
+        InboundEvent,
+        Ticket,
+        Job,
+        JobRun,
+    ],
+)
+def test_admin_cannot_add_change_or_delete_operational_data(model: type) -> None:
     request = RequestFactory().get("/admin/")
     request.user = User(is_superuser=True, is_staff=True)
     model_admin = admin.site._registry[model]

@@ -149,3 +149,13 @@ def test_effective_hash_changes_with_any_policy_input(
     edit_manifest(CLIENT, lambda data: set_path(data, "budget.daily_usd", 7.0))
     after_client = load_bundle(manifests_dir).effective_hash("example")
     assert len({before, after_global, after_client}) == 3
+
+
+def test_forbidden_list_must_name_catalog_actions(manifests_dir: Path, edit_manifest: Edit) -> None:
+    def typo(data: dict[str, Any]) -> None:
+        data["forbidden"].append("expose_secrets")  # not in the catalog
+
+    edit_manifest("global.yaml", typo)
+    with pytest.raises(ManifestError) as exc_info:
+        load_bundle(manifests_dir)
+    assert any("unknown actions" in e for e in exc_info.value.errors)

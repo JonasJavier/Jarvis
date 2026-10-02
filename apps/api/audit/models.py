@@ -10,21 +10,36 @@ from django.db import models
 
 
 class AppendOnlyError(Exception):
-    """Raised on any attempt to modify or delete an audit event."""
+    """Raised on any attempt to modify or delete an append-only row."""
 
 
-class AuditEventQuerySet(models.QuerySet["AuditEvent"]):
+class AppendOnlyQuerySet[M: models.Model](models.QuerySet[M]):
     def update(self, **kwargs: Any) -> NoReturn:
-        raise AppendOnlyError("Audit events cannot be updated.")
+        raise AppendOnlyError("Append-only rows cannot be updated.")
 
     def delete(self) -> NoReturn:
-        raise AppendOnlyError("Audit events cannot be deleted.")
+        raise AppendOnlyError("Append-only rows cannot be deleted.")
 
     def bulk_update(self, *args: Any, **kwargs: Any) -> NoReturn:
-        raise AppendOnlyError("Audit events cannot be updated.")
+        raise AppendOnlyError("Append-only rows cannot be updated.")
 
 
-class AuditEvent(models.Model):
+class AppendOnlyModel(models.Model):
+    """Base for ledgers: rows can be created, never changed or removed through the ORM."""
+
+    class Meta:
+        abstract = True
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        if not self._state.adding:
+            raise AppendOnlyError("Append-only rows cannot be updated.")
+        super().save(*args, **kwargs)
+
+    def delete(self, *args: Any, **kwargs: Any) -> NoReturn:
+        raise AppendOnlyError("Append-only rows cannot be deleted.")
+
+
+class AuditEvent(AppendOnlyModel):
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     actor = models.CharField(max_length=64)
     action = models.CharField(max_length=128, db_index=True)
@@ -39,18 +54,10 @@ class AuditEvent(models.Model):
     correlation_id = models.CharField(max_length=64, blank=True, db_index=True)
     payload = models.JSONField(default=dict, blank=True)
 
-    objects = AuditEventQuerySet.as_manager()
+    objects = AppendOnlyQuerySet["AuditEvent"].as_manager()
 
     class Meta:
         ordering = ["-created_at", "-id"]
 
     def __str__(self) -> str:
         return f"{self.created_at:%Y-%m-%d %H:%M:%S} {self.actor} {self.action}"
-
-    def save(self, *args: Any, **kwargs: Any) -> None:
-        if not self._state.adding:
-            raise AppendOnlyError("Audit events cannot be updated.")
-        super().save(*args, **kwargs)
-
-    def delete(self, *args: Any, **kwargs: Any) -> NoReturn:
-        raise AppendOnlyError("Audit events cannot be deleted.")

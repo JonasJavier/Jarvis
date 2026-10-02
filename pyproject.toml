@@ -37,7 +37,10 @@ ignore = ["RUF012"]  # Django Meta/admin class attributes are idiomatic lists
 "tests/**" = ["S101", "S105", "S106"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["config", "clients", "projects", "policies", "audit"]
+known-first-party = [
+    "config", "clients", "projects", "policies", "audit",
+    "idempotency", "budgets", "approvals", "tickets", "jobs", "llm", "identity",
+]
 
 [tool.mypy]
 python_version = "3.13"

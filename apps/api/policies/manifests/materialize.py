@@ -19,7 +19,7 @@ from audit.services import record
 from clients.models import Client, Contact
 from policies.manifests.loader import ManifestBundle, ManifestFile
 from policies.manifests.schema import ClientManifest, ProjectManifest
-from policies.models import ContractPolicy
+from policies.models import ContractPolicy, GlobalPolicy
 from projects.models import Project
 
 ACTOR = "system:load_manifests"
@@ -57,6 +57,26 @@ def source_commit(repo_dir: Path) -> str:
     except (OSError, subprocess.CalledProcessError):
         return ""
     return f"{head}-dirty" if dirty else head
+
+
+def _expected_global(bundle: ManifestBundle) -> dict[str, Any]:
+    manifest = bundle.global_manifest.data
+    return {
+        "timezone": manifest.timezone,
+        "budget_daily_usd": manifest.budgets.daily_usd,
+        "budget_monthly_usd": manifest.budgets.monthly_usd,
+        "alert_thresholds_pct": list(manifest.budgets.alert_thresholds_pct),
+        "low_priority_block_pct": manifest.budgets.low_priority_block_pct,
+        "concurrent_ai_jobs": manifest.limits.concurrent_ai_jobs,
+        "worker_limits": manifest.worker_limits.model_dump(mode="json"),
+        "approval_default_ttl_minutes": manifest.approvals.default_ttl_minutes,
+        "max_level_client_projects": manifest.autonomy.max_level_client_projects,
+        "max_level_internal_projects": manifest.autonomy.max_level_internal_projects,
+        "production_ops_per_hour": manifest.autonomy.production_ops_per_hour,
+        "forbidden": list(manifest.forbidden),
+        "protected_paths": list(manifest.protected_paths),
+        "manifest_hash": bundle.global_manifest.content_hash,
+    }
 
 
 def _expected_client(client_file: ManifestFile[ClientManifest]) -> dict[str, Any]:
@@ -126,6 +146,33 @@ def apply_bundle(bundle: ManifestBundle, *, commit: str) -> LoadReport:
     report = LoadReport()
     now = timezone.now()
     provenance = {"source_commit": commit, "loaded_at": now}
+
+    expected_global = _expected_global(bundle)
+    global_policy = GlobalPolicy.objects.filter(pk=GlobalPolicy.SINGLETON_ID).first()
+    if global_policy is None:
+        GlobalPolicy.objects.create(**expected_global, **provenance)
+        report.created.append("global")
+        record(
+            actor=ACTOR,
+            action="manifest.global.created",
+            target_type="global_policy",
+            target_id="global",
+            payload={"manifest_hash": expected_global["manifest_hash"], "source_commit": commit},
+        )
+    elif changed := _differences(global_policy, expected_global):
+        GlobalPolicy.objects.filter(pk=global_policy.pk).update(**expected_global, **provenance)
+        report.updated.append("global")
+        record(
+            actor=ACTOR,
+            action="manifest.global.updated",
+            target_type="global_policy",
+            target_id="global",
+            payload={
+                "fields": changed,
+                "manifest_hash": expected_global["manifest_hash"],
+                "source_commit": commit,
+            },
+        )
 
     # Contacts that disappear or move between clients are removed first, so the
     # unique (kind, value) constraint holds while the new ones are inserted.
@@ -312,6 +359,13 @@ def detect_drift(bundle: ManifestBundle) -> list[str]:
     """Differences between the manifests and the database. Empty list means in sync."""
     drift: list[str] = []
 
+    global_policy = GlobalPolicy.objects.filter(pk=GlobalPolicy.SINGLETON_ID).first()
+    if global_policy is None:
+        drift.append("global: not loaded")
+    else:
+        for name in _differences(global_policy, _expected_global(bundle)):
+            drift.append(f"global: field '{name}' differs from manifest")
+
     for client_id, client_file in bundle.clients.items():
         client = Client.objects.filter(slug=client_id).first()
         if client is None:
@@ -347,4 +401,32 @@ def detect_drift(bundle: ManifestBundle) -> list[str]:
     for project in Project.objects.filter(is_active=True).exclude(slug__in=bundle.projects):
         drift.append(f"project:{project.slug}: active in database but absent from manifests")
 
+    return drift
+
+
+def project_drift(bundle: ManifestBundle, project: Project) -> list[str]:
+    """Drift that affects one project's policy: global, its client, the project and its policy.
+
+    Used by the `PolicyEngine` to refuse non-read actions on a project whose database policy no
+    longer matches the versioned manifests.
+    """
+    drift: list[str] = []
+    global_policy = GlobalPolicy.objects.filter(pk=GlobalPolicy.SINGLETON_ID).first()
+    if global_policy is None or _differences(global_policy, _expected_global(bundle)):
+        drift.append("global policy differs from manifest")
+
+    project_file = bundle.projects.get(project.slug)
+    if project_file is None:
+        return [*drift, f"project:{project.slug}: absent from manifests"]
+    client_file = bundle.clients[project_file.data.project.client_id]
+    client = project.client
+    if client.slug != client_file.data.client.id or _differences(
+        client, _expected_client(client_file)
+    ):
+        drift.append(f"client:{client.slug}: differs from manifest")
+    if _differences(project, _expected_project(project_file)):
+        drift.append(f"project:{project.slug}: differs from manifest")
+    policy = ContractPolicy.objects.filter(project=project).first()
+    if policy is None or _differences(policy, _expected_policy(bundle, project.slug)):
+        drift.append(f"policy:{project.slug}: differs from manifest")
     return drift

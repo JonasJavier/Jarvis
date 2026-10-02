@@ -8,6 +8,7 @@ budgets:                            # servicios de pago por uso (IA, WhatsApp, A
   daily_usd: 15.00
   monthly_usd: 200.00
   alert_thresholds_pct: [50, 70, 80, 90, 100]
+  low_priority_block_pct: 90        # desde aquí se bloquea el trabajo de pago de baja prioridad
 
 limits:
   concurrent_ai_jobs: 2

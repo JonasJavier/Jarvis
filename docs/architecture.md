@@ -109,8 +109,8 @@ class WorkerExecutor(Protocol):     # LocalDockerExecutor (dev) · producción: 
     def launch(self, spec: JobSpec, *, limits: WorkerLimits, idempotency_key: str) -> RunHandle: ...
     def cancel(self, handle: RunHandle) -> None: ...
 
-class LLMProvider(Protocol):        # FakeLLM · AnthropicProvider
-    def estimate_cost(self, request: LLMRequest) -> Decimal: ...
+class LLMProvider(Protocol):        # FakeLLMProvider · AnthropicProvider (Fase 3)
+    def estimate_usage(self, request: LLMRequest, model: str) -> LLMUsage: ...  # el gateway lo tarifica
     def invoke(self, request: LLMRequest) -> LLMResult: ...   # LLMResult incluye usage detallado
 
 class CodingAgent(Protocol):        # MockCodingAgent · ClaudeCodeAgent · ClaudePlatformAgent
@@ -174,7 +174,7 @@ orientativas y se revisan al llegar a esa fase.
 | Fase | Modelos |
 |---|---|
 | 1A | `Client`, `Contact`, `Project`, `ContractPolicy` (materializada), `AuditEvent` |
-| 1B | `InboundEvent`, `Ticket`, `Job`, `JobRun`, `Approval`, `Budget`, `BudgetReservation`, `UsageLedger`, `IdempotencyRecord` |
+| 1B | `GlobalPolicy` (materializada), `InboundEvent`, `Ticket`, `Job`, `JobRun`, `Approval`, `Budget`, `BudgetReservation`, `UsageLedger`, `IdempotencyRecord` |
 | 2 | `RepositoryConnection` (instalación GitHub ↔ repo del proyecto) |
 | 3 | `Artifact` (diff, logs, reporte) |
 | 5 | `Conversation`, `Message` |

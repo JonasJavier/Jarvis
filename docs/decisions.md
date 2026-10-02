@@ -240,3 +240,71 @@ asumir proveedor. DRF sin clases de autenticación: ningún endpoint de negocio 
 Fase 1B. `global.yaml` no se materializa en tabla propia; entra en el hash efectivo de cada política.
 **Consecuencias:** el mismo `DATABASE_URL` sirve en local, CI y producción. Los tests usan PostgreSQL
 real (no SQLite) para que el comportamiento coincida con producción.
+
+## ADR-026 — `global.yaml` materializado como `GlobalPolicy`
+**Estado:** Aceptada (2026-10-02) · matiza ADR-025
+
+**Contexto:** el `PolicyEngine`, el `BudgetGuard` y el `ApprovalService` necesitan en tiempo de
+ejecución los techos y prohibiciones globales (forbidden, presupuestos, TTL de aprobaciones, umbrales,
+niveles máximos). ADR-025 decía que `global.yaml` no tenía tabla propia.
+**Decisión:** `GlobalPolicy` es una fila única (pk=1) escrita solo por `load_manifests`, de solo
+lectura en el admin y vigilada por `check_manifests`. `global.yaml` sigue entrando en el hash
+efectivo de cada `ContractPolicy`. Si la fila no existe, el motor de política deniega todo.
+**Consecuencias:** una sola fuente en tiempo de ejecución (la base de datos materializada) y
+fail-closed si los manifests nunca se cargaron.
+
+## ADR-027 — Catálogo de acciones y techos de actor en código
+**Estado:** Aceptada (2026-10-02)
+
+**Decisión:** `policies/actions.py` define el catálogo cerrado de acciones (`Action`), la clase de
+riesgo de cada una (`RISK_OF`), la clase máxima autónoma por nivel (`AUTONOMOUS_CEILING`) y el techo
+de capacidades de cada actor (`ACTOR_CEILING`). Los manifests solo pueden nombrar acciones del
+catálogo (`restrict`, `forbidden`); un nombre desconocido invalida el bundle. Los agentes LLM
+(`client_agent`, `ops_agent`, `coding_worker`) no ejecutan acciones con efectos externos: el
+`coding_worker` termina en el Draft PR, `ops_agent` solo lee, `client_agent` solo redacta. El `owner`
+no ejecuta acciones: aprueba o rechaza. El `PolicyEngine` también bloquea acciones no `read` cuando la
+base de datos ha derivado de los manifests (`project_drift`).
+**Consecuencias:** cambiar la clase de riesgo de una acción o el techo de un actor es un cambio de
+código revisado y cubierto por `tests/security/`. Añadir una acción exige asignarle clase y al menos
+un actor ejecutor (comprobado al importar el módulo).
+
+## ADR-028 — Catálogo de precios versionado en `pricing/pricing.yaml`
+**Estado:** Aceptada (2026-10-02)
+
+**Decisión:** tarifas en `pricing/pricing.yaml` (ruta configurable `JARVIS_PRICING_FILE`) con una
+`version` global que cada `UsageLedger` guarda como `pricing_version`. Precios por millón de tokens
+(entrada, salida, lectura y escritura de caché) y por unidad (mensajes). Un proveedor/modelo sin
+tarifa es `PricingError`, nunca coste cero. Los modelos se eligen por **rol** (`cheap`, `coding`,
+`reasoning`) desde variables de entorno `JARVIS_LLM_MODEL_*`; el proveedor desde `JARVIS_LLM_PROVIDER`
+(solo `fake` hasta la Fase 3). El proveedor estima **uso** (tokens) y el `LLMGateway` lo tarifica,
+en lugar de que el proveedor estime coste.
+**Consecuencias:** las tarifas reales de Anthropic y Meta se añaden al activar las Fases 3 y 5,
+verificadas contra la documentación oficial; los costes históricos siguen siendo reproducibles.
+
+## ADR-029 — Semántica de presupuestos, periodos y circuit breaker
+**Estado:** Aceptada (2026-10-02)
+
+**Decisión:** una fila `Budget` por `(scope, scope_ref, period, period_key)`; periodos `day` y
+`month` según la zona horaria de `global.yaml`, y `run` para el tope por ejecución
+(`max_ai_usd_per_run`, scope `job`, ref `run:{job_run_id}`). Las filas se crean bajo demanda con el
+límite vigente del manifest (que se reescribe si el manifest cambió) y se bloquean con
+`select_for_update` en el orden fijo global → client → project → job. El circuit breaker vive en la
+propia fila (`tripped_at`): se dispara al llegar al 100 % del periodo, o manualmente para el scope
+global (`trip_global`), y bloquea cualquier reserva que toque esa fila. A partir de
+`low_priority_block_pct` (nuevo campo de `global.yaml`, 90 %) se rechaza el trabajo de prioridad
+baja. Las denegaciones y los cruces de umbral se auditan fuera de la transacción revertida.
+**Consecuencias:** sin deadlocks entre reservas concurrentes (test con hilos reales); un coste real
+superior al estimado se cobra igual y puede disparar el breaker; los recursos de cómputo siguen fuera
+de este mecanismo (ADR-013).
+
+## ADR-030 — Identidad de la API: `IdentityVerifier` y allowlist del owner
+**Estado:** Aceptada (2026-10-02)
+
+**Decisión:** la API autentica con `Authorization: Bearer <token>` contra la implementación de
+`IdentityVerifier` configurada en `JARVIS_IDENTITY_VERIFIER` (`FakeVerifier` en desarrollo y tests;
+la real se decide en la Fase 6). El owner se reconoce por `JARVIS_OWNER_EMAILS` (emails normalizados
+con las mismas reglas que los contactos), nunca por un claim del token. Solo una identidad owner puede
+aprobar o rechazar un `Approval`; solo `control_plane`, `deployer` y `staging_trigger` pueden
+solicitar o consumir uno.
+**Consecuencias:** ningún endpoint acepta anónimos; el panel de la Fase 6 solo tiene que aportar un
+verificador real y las vistas.

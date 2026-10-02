@@ -30,8 +30,9 @@ aislados** que usan Claude solo cuando hace falta. Jarvis actúa en producción 
 
 ## Estado
 
-Fase 1A (scaffold del control plane) completada. Siguiente: **Fase 1B**, pendiente de autorización
-del owner (ver [plan de implementación](docs/implementation-plan.md)).
+Fases 1A (scaffold del control plane) y 1B (núcleo de seguridad: política por nivel de autonomía,
+aprobaciones, presupuestos, idempotencia) completadas. Siguiente: **Fase 2**, pendiente de
+autorización del owner (ver [plan de implementación](docs/implementation-plan.md)).
 
 Desarrollo local con Docker; producción prevista en Railway.
 

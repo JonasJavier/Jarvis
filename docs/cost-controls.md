@@ -41,8 +41,10 @@ incluye solo: política global + del cliente + del proyecto + ticket + archivos 
 ## Precios versionados
 
 Las tarifas (por modelo, por mensaje de WhatsApp, por API) viven en un catálogo de precios versionado
-fuera del código, cada entrada con su `pricing_version`. Se verifican contra la documentación oficial
-de cada proveedor al activar la fase correspondiente. Nunca se hardcodean.
+fuera del código (`pricing/pricing.yaml`, ruta configurable con `JARVIS_PRICING_FILE`), con una
+`version` que cada entrada de `UsageLedger` guarda como `pricing_version`. Se verifican contra la
+documentación oficial de cada proveedor al activar la fase correspondiente. Nunca se hardcodean; un
+modelo o servicio sin tarifa es un error, nunca coste cero.
 
 ## UsageLedger
 

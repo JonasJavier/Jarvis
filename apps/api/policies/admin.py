@@ -1,7 +1,12 @@
 from django.contrib import admin
 
 from audit.admin import ReadOnlyModelAdmin
-from policies.models import ContractPolicy
+from policies.models import ContractPolicy, GlobalPolicy
+
+
+@admin.register(GlobalPolicy)
+class GlobalPolicyAdmin(ReadOnlyModelAdmin):
+    list_display = ("manifest_hash", "budget_daily_usd", "budget_monthly_usd", "loaded_at")
 
 
 @admin.register(ContractPolicy)

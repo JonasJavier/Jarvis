@@ -25,7 +25,12 @@ def load(root: Path) -> Any:
 def test_first_load_materializes_everything(manifests_dir: Path) -> None:
     report = load(manifests_dir)
 
-    assert report.created == ["client:example-client", "project:example", "policy:example"]
+    assert report.created == [
+        "global",
+        "client:example-client",
+        "project:example",
+        "policy:example",
+    ]
     client = Client.objects.get(slug="example-client")
     assert set(client.contacts.values_list("kind", "value")) == {
         ("whatsapp", "+18095550100"),
@@ -152,3 +157,23 @@ def test_load_manifests_command_rejects_invalid_bundle(
 def test_validate_only_does_not_write(manifests_dir: Path) -> None:
     call_command("load_manifests", dir=manifests_dir, validate_only=True)
     assert not Client.objects.exists()
+
+
+def test_global_policy_is_materialized_and_drift_detected(manifests_dir: Path) -> None:
+    from policies.models import GlobalPolicy
+
+    load(manifests_dir)
+    global_policy = GlobalPolicy.current()
+    assert global_policy.forbidden == [
+        "expose_secret",
+        "disable_audit_logging",
+        "access_other_client_projects",
+        "modify_ci",
+        "modify_policy",
+    ]
+    assert global_policy.approval_default_ttl_minutes == 60
+    assert global_policy.low_priority_block_pct == 90
+
+    GlobalPolicy.objects.filter(pk=global_policy.pk).update(forbidden=[])
+    drift = detect_drift(load_bundle(manifests_dir))
+    assert drift == ["global: field 'forbidden' differs from manifest"]
