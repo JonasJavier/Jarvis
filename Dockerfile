@@ -15,7 +15,9 @@ COPY pyproject.toml uv.lock .python-version ./
 RUN uv sync --locked --no-dev --no-install-project
 
 COPY apps ./apps
+COPY workers ./workers
 COPY project_manifests ./project_manifests
+COPY pricing ./pricing
 
 RUN useradd --create-home --uid 1000 jarvis
 USER jarvis

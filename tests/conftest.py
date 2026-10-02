@@ -1,5 +1,9 @@
+import os
 import shutil
+import subprocess
+import uuid
 from collections.abc import Callable
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -159,6 +163,90 @@ def owner() -> VerifiedIdentity:
 @pytest.fixture
 def stranger() -> VerifiedIdentity:
     return VerifiedIdentity(subject="someone-uid", email="someone@example.net")
+
+
+# --- Phase 3 fixtures: local git repositories and the Docker sandbox -------------------------
+
+WORKER_IMAGE = os.environ.get("JARVIS_WORKER_IMAGE", "jarvis-worker:dev")
+
+# A tiny project with a bug: `add` subtracts. Tests need only the standard library.
+BUGGY_PROJECT: dict[str, str] = {
+    "calc.py": "def add(a, b):\n    return a - b\n",
+    "test_calc.py": (
+        "import unittest\n\nfrom calc import add\n\n\n"
+        "class AddTests(unittest.TestCase):\n"
+        "    def test_add(self):\n        self.assertEqual(add(2, 3), 5)\n"
+    ),
+    "README.md": "# buggy\n",
+}
+UNITTEST_COMMANDS: dict[str, list[str]] = {
+    "install": [],
+    "test": ["python -m unittest -q"],
+    "lint": [],
+    "typecheck": [],
+}
+
+
+def git(*args: str, cwd: Path) -> str:
+    completed = subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=test",
+            "-c",
+            "user.email=test@example.com",
+            "-c",
+            "core.autocrlf=false",  # commit files exactly as written, whatever git is configured
+            *args,
+        ],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return completed.stdout.strip()
+
+
+@pytest.fixture
+def git_repo(tmp_path: Path) -> Callable[..., Path]:
+    """Create a local git repository (branch `main`) with the given files committed."""
+
+    def make(files: dict[str, str] | None = None) -> Path:
+        repo = tmp_path / f"origin-{uuid.uuid4().hex[:8]}"
+        repo.mkdir()
+        git("init", "-q", "-b", "main", cwd=repo)
+        for name, content in (files or BUGGY_PROJECT).items():
+            path = repo / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8", newline="\n")
+        git("add", "-A", cwd=repo)
+        git("commit", "-q", "-m", "initial", cwd=repo)
+        return repo
+
+    return make
+
+
+@lru_cache(maxsize=1)
+def docker_ready() -> bool:
+    docker = shutil.which("docker")
+    if docker is None:
+        return False
+    try:
+        probe = subprocess.run(
+            [docker, "image", "inspect", WORKER_IMAGE], capture_output=True, timeout=60, check=False
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return probe.returncode == 0
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    if docker_ready():
+        return
+    skip = pytest.mark.skip(reason=f"Docker daemon or image {WORKER_IMAGE} not available")
+    for item in items:
+        if "docker" in item.keywords:
+            item.add_marker(skip)
 
 
 @pytest.fixture

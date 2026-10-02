@@ -7,6 +7,7 @@ os.environ.setdefault("JARVIS_IDENTITY_VERIFIER", "identity.verifier.FakeVerifie
 os.environ.setdefault("JARVIS_OWNER_EMAILS", "owner@example.com")
 os.environ.setdefault("JARVIS_LLM_PROVIDER", "fake")
 os.environ.setdefault("JARVIS_REPO_HOST", "fake")
+os.environ.setdefault("JARVIS_WORKER_EXECUTOR", "inprocess")
 os.environ.setdefault("GITHUB_WEBHOOK_SECRET", "test-webhook-secret")
 os.environ.setdefault("GITHUB_APP_ID", "12345")
 os.environ.setdefault("JARVIS_LLM_MODEL_CHEAP", "fake-small")

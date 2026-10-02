@@ -22,9 +22,10 @@ package = false
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "config.settings.test"
-pythonpath = ["apps/api"]
+pythonpath = ["apps/api", "."]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
+markers = ["docker: needs a Docker daemon and the jarvis-worker image (skipped otherwise)"]
 
 [tool.ruff]
 line-length = 100
@@ -36,17 +37,18 @@ select = ["E", "W", "F", "I", "B", "UP", "S", "DJ", "SIM", "RUF"]
 ignore = ["RUF012"]  # Django Meta/admin class attributes are idiomatic lists
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101", "S105", "S106"]
+"tests/**" = ["S101", "S103", "S105", "S106", "S108", "S603", "S607"]
 
 [tool.ruff.lint.isort]
 known-first-party = [
     "config", "clients", "projects", "policies", "audit",
     "idempotency", "budgets", "approvals", "tickets", "jobs", "llm", "identity", "integrations",
+    "workers",
 ]
 
 [tool.mypy]
 python_version = "3.13"
-mypy_path = "apps/api"
+mypy_path = "apps/api,."
 strict = true
 plugins = ["mypy_django_plugin.main", "pydantic.mypy"]
 exclude = ["migrations/"]
@@ -60,7 +62,7 @@ disallow_incomplete_defs = false
 django_settings_module = "config.settings.test"
 
 [tool.coverage.run]
-source = ["apps/api"]
+source = ["apps/api", "workers"]
 omit = ["*/migrations/*", "*/settings/*", "apps/api/manage.py", "apps/api/config/*sgi.py"]
 
 [dependency-groups]

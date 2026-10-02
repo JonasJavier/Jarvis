@@ -44,3 +44,6 @@ tmp/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Ephemeral worker workspaces (Phase 3)
+.workspaces/

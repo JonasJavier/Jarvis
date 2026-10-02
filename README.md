@@ -30,9 +30,10 @@ aislados** que usan Claude solo cuando hace falta. Jarvis actúa en producción 
 
 ## Estado
 
-Fases 1A (scaffold del control plane) y 1B (núcleo de seguridad) completadas. Fase 2 (GitHub App:
-webhook firmado, RepoBroker, preflight de Rulesets) con el código completo, pendiente de la prueba
-real contra un repositorio de prueba del owner (ver [plan de implementación](docs/implementation-plan.md)).
+Fases 1A (scaffold), 1B (núcleo de seguridad), 2 (GitHub App) y 3 (coding worker en sandbox Docker
+con agente mock) completadas y probadas en real contra un repositorio de prueba: **prototipo local**
+alcanzado. El agente con Claude espera la decisión ADR-005. Siguiente: Fase 4 (Railway). Ver el
+[plan de implementación](docs/implementation-plan.md).
 
 Desarrollo local con Docker; producción prevista en Railway.
 

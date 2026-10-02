@@ -83,6 +83,8 @@ class ProtectionStatus:
 
 
 class RepoHost(Protocol):
+    def clone_url(self, repository: str) -> str: ...
+
     def default_branch_sha(self, repository: str, branch: str) -> str: ...
 
     def branch_sha(self, repository: str, branch: str) -> str | None: ...
@@ -120,7 +122,30 @@ class FakeRepoHost:
     repos: dict[str, _FakeRepo] = field(default_factory=dict)
     pushes: list[tuple[str, str, ChangeSet]] = field(default_factory=list)
     tokens: list[ScopedToken] = field(default_factory=list)
+    clone_urls: dict[str, str] = field(default_factory=dict)  # repository -> local git url
     _next_pr: int = 1
+
+    def clone_url(self, repository: str) -> str:
+        self._repo(repository)
+        try:
+            return self.clone_urls[repository.lower()]
+        except KeyError as exc:
+            raise RepoHostError(f"no clone source registered for {repository}") from exc
+
+    def register_clone_source(self, repository: str, path: str) -> str:
+        """Serve `repository` from a local git repository; its HEAD becomes the default branch."""
+        import shutil
+        import subprocess
+
+        repo = self._repo(repository)
+        git = shutil.which("git") or "git"
+        head = subprocess.run(  # noqa: S603 - test helper, fixed git subcommand
+            [git, "-C", path, "rev-parse", "HEAD"], capture_output=True, text=True, check=True
+        ).stdout.strip()
+        repo.branches[repo.default_branch] = head
+        repo.files.setdefault(head, {})
+        self.clone_urls[repository.lower()] = path
+        return head
 
     def add_repository(
         self,

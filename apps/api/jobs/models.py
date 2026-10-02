@@ -92,6 +92,14 @@ class JobRun(models.Model):
     finished_at = models.DateTimeField(null=True, blank=True)
     cost_usd = models.DecimalField(max_digits=14, decimal_places=6, default=Decimal("0"))
     error = models.CharField(max_length=500, blank=True)  # sanitized, never raw output
+    # Worker report (Phase 3). All of it is untrusted output, stored for traceability.
+    agent_kind = models.CharField(max_length=32, blank=True)
+    turns = models.PositiveIntegerField(default=0)
+    tool_calls = models.JSONField(default=list, blank=True)
+    files_changed = models.JSONField(default=list, blank=True)
+    tests_passed = models.BooleanField(null=True, blank=True)
+    test_output = models.TextField(blank=True)
+    summary = models.TextField(blank=True)
 
     class Meta:
         ordering = ["-started_at"]

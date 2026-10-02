@@ -48,9 +48,9 @@ maintenance:
 
 commands:                           # se ejecutan como código no confiable, sin credenciales
   install: ["uv sync"]
-  test: ["pytest"]
-  lint: ["ruff check ."]
-  typecheck: ["mypy ."]
+  test: ["uv run pytest -q"]
+  lint: ["uv run ruff check ."]
+  typecheck: []
 
 ownership: client                   # client | internal (nivel 4 solo para internal)
 

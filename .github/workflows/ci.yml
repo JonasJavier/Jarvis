@@ -52,7 +52,7 @@ jobs:
         run: uv run ruff format --check .
 
       - name: Type check
-        run: uv run mypy apps/api tests
+        run: uv run mypy apps/api workers tests
 
       - name: Migrations are up to date
         working-directory: apps/api
@@ -61,6 +61,9 @@ jobs:
       - name: Manifests are valid
         working-directory: apps/api
         run: uv run python manage.py load_manifests --validate-only --settings=config.settings.test
+
+      - name: Build worker sandbox image
+        run: docker build -f workers/coder/Dockerfile -t jarvis-worker:dev .
 
       - name: Tests
         run: uv run pytest --cov --cov-report=term-missing:skip-covered

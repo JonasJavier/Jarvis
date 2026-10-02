@@ -6,7 +6,7 @@ no project and therefore nothing a job could act on.
 """
 
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from django.db import IntegrityError, transaction
 
@@ -16,6 +16,9 @@ from clients.resolver import Identified, NeedsIdentification, resolve
 from idempotency.services import IdempotencyService
 from tickets.models import InboundEvent, Ticket, TicketStatus
 from tickets.states import transition
+
+if TYPE_CHECKING:
+    from projects.models import Project
 
 ACTOR = "control_plane"
 MAX_SUMMARY_LENGTH = 2000
@@ -104,6 +107,37 @@ def _persist_event(
             return event, True
     except IntegrityError:
         return InboundEvent.objects.get(source=source, external_id=external_id), False
+
+
+def open_manual_code_task(project: "Project", *, ref: str, summary: str) -> Ticket:
+    """Owner-initiated ticket for `project`, moved to `investigating`. Idempotent per `ref`.
+
+    Manual tickets have no external sender: the owner identifies the project explicitly, so the
+    normal contact-based identification is bypassed on purpose (and audited as `owner`).
+    """
+    ticket = ingest(
+        source="manual",
+        external_id=ref,
+        sender_kind=None,
+        sender_value="",
+        summary=summary,
+        project_hint=project.repository,
+    ).ticket
+    if ticket.project_id is None:
+        ticket.client, ticket.project = project.client, project
+        ticket.save(update_fields=["client", "project", "updated_at"])
+        transition(ticket, TicketStatus.IDENTIFIED, actor="owner", reason="manual task")
+    order = [
+        TicketStatus.IDENTIFIED,
+        TicketStatus.CLASSIFIED,
+        TicketStatus.CODE_TASK,
+        TicketStatus.CONTRACT_CHECK,
+        TicketStatus.INVESTIGATING,
+    ]
+    if ticket.status in order:  # a ticket already past `investigating` is left where it is
+        for status in order[order.index(TicketStatus(ticket.status)) + 1 :]:
+            transition(ticket, status, actor="owner", reason="manual task")
+    return ticket
 
 
 @transaction.atomic

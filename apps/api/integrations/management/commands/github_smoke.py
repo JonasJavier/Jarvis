@@ -14,9 +14,7 @@ from integrations.github.preflight import RepositoryUnprotected
 from jobs.services import create_job
 from policies.engine import default_engine
 from projects.models import Project
-from tickets.models import TicketStatus
-from tickets.services import ingest
-from tickets.states import transition
+from tickets.services import open_manual_code_task
 
 
 class Command(BaseCommand):
@@ -33,32 +31,9 @@ class Command(BaseCommand):
         if project is None:
             raise CommandError(f"unknown or inactive project {options['project']!r}")
         engine = default_engine()
-        ticket = ingest(
-            source="manual",
-            external_id=f"github-smoke:{options['ref']}",
-            sender_kind=None,
-            sender_value="",
-            summary="Phase 2 smoke test",
-            project_hint=project.repository,
-        ).ticket
-        if ticket.project_id is None:
-            # Manual tickets have no sender: attach the project explicitly (owner-initiated).
-            ticket.client, ticket.project = project.client, project
-            ticket.save(update_fields=["client", "project", "updated_at"])
-            transition(ticket, TicketStatus.IDENTIFIED, actor="owner", reason="manual smoke")
-        for status in (
-            TicketStatus.CLASSIFIED,
-            TicketStatus.CODE_TASK,
-            TicketStatus.CONTRACT_CHECK,
-        ):
-            if (
-                ticket.status != TicketStatus.INVESTIGATING
-                and ticket.status != TicketStatus.PULL_REQUEST
-            ):
-                transition(ticket, status, actor="owner", reason="manual smoke")
-        if ticket.status == TicketStatus.CONTRACT_CHECK:
-            transition(ticket, TicketStatus.INVESTIGATING, actor="owner", reason="manual smoke")
-
+        ticket = open_manual_code_task(
+            project, ref=f"github-smoke:{options['ref']}", summary="Phase 2 smoke test"
+        )
         job = create_job(ticket, "smoke", engine=engine).job
         host = default_host()
         broker = default_broker(engine)

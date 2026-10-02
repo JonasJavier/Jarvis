@@ -118,6 +118,10 @@ class GitHubAppHost:
 
     # --- RepoHost -------------------------------------------------------------------------
 
+    def clone_url(self, repository: str) -> str:
+        _split(repository)
+        return f"https://github.com/{repository}.git"
+
     def default_branch_sha(self, repository: str, branch: str) -> str:
         sha = self.branch_sha(repository, branch)
         if sha is None:

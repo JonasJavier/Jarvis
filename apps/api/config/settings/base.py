@@ -5,6 +5,7 @@ Nothing here assumes a specific hosting provider (ADR-001).
 
 import os
 import re
+import sys
 from pathlib import Path
 
 import dj_database_url
@@ -16,6 +17,10 @@ django_stubs_ext.monkeypatch()
 
 API_DIR = Path(__file__).resolve().parents[2]
 REPO_DIR = API_DIR.parents[1]
+
+# The control plane imports the worker contract (`workers.coder.job_spec`) from the repo root.
+if str(REPO_DIR) not in sys.path:
+    sys.path.insert(0, str(REPO_DIR))
 
 
 def env(name: str, default: str | None = None) -> str:
@@ -148,3 +153,8 @@ GITHUB_APP_PRIVATE_KEY_FILE = env("GITHUB_APP_PRIVATE_KEY_FILE", "")
 GITHUB_WEBHOOK_SECRET = env("GITHUB_WEBHOOK_SECRET", "")
 GITHUB_API_URL = env("GITHUB_API_URL", "https://api.github.com")
 JARVIS_REPO_HOST = env("JARVIS_REPO_HOST")  # fake | github
+
+# Coding worker sandbox (Phase 3). `docker` isolates each run; `inprocess` is for tests only.
+JARVIS_WORKER_EXECUTOR = env("JARVIS_WORKER_EXECUTOR")  # docker | inprocess
+JARVIS_WORKER_IMAGE = env("JARVIS_WORKER_IMAGE", "jarvis-worker:dev")
+JARVIS_WORKSPACE_ROOT = Path(env("JARVIS_WORKSPACE_ROOT", str(REPO_DIR / ".workspaces")))

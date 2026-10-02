@@ -22,7 +22,7 @@ sesión. Los modelos y migraciones son incrementales: cada fase crea solo lo que
 | 1A | Scaffold del control plane | ✅ Completada y revisada | 5–8 h |
 | 1B | Núcleo de seguridad: política, aprobaciones, presupuesto, idempotencia | ✅ Completada — pendiente revisión del owner | 10–14 h |
 | 2 | Integración GitHub App | ✅ Completada y probada en real — pendiente revisión del owner | 15–25 h |
-| 3 | Coding worker local (mock → Claude) | ⏳ Pendiente | 20–35 h |
+| 3 | Coding worker local (mock → Claude) | ✅ Completada con `MockCodingAgent` y probada en real — `ClaudeCodeAgent` espera la ADR-005 — pendiente revisión del owner | 20–35 h |
 | 4 | Despliegue de Jarvis en producción (Railway) | ⏳ Pendiente — guía recibida ([railway.md](railway.md)) | 8–14 h |
 | 5 | WhatsApp Cloud API | ⏳ Pendiente | 12–20 h |
 | 6 | Aprobaciones, despliegues de clientes y panel | ⏳ Pendiente | 15–25 h |
@@ -269,7 +269,49 @@ tests de seguridad: un prompt de inyección no logra leer el entorno ni salir de
 repo no alcanza la red bloqueada ni supera límites de memoria/PIDs; agotar presupuesto detiene el job;
 el worker no posee ninguna credencial de deploy.
 
-**Hito: prototipo local.**
+**Resultado (2026-10-02):** 286 tests (45 nuevos), cobertura 95 %, ruff, mypy estricto y
+migraciones en verde; los tests de Docker se ejecutan donde hay daemon e imagen (CI construye
+`jarvis-worker:dev`) y se omiten en otro caso. Implementado:
+- `workers/coder/` (solo biblioteca estándar, corre dentro del sandbox): `JobSpec`/`AgentReport`
+  (contrato §12), `WorktreeTools` acotadas (sin rutas absolutas, `..`, symlinks ni `.git`; sin
+  escritura en rutas protegidas; tamaño máximo de archivo; límite duro de turnos; solo los comandos
+  del manifest con entorno saneado), `MockCodingAgent` determinista y `runner` con dos fases.
+- `LocalDockerExecutor`: un contenedor por fase (`prepare` con red para instalar dependencias,
+  `work` sin red para agente y tests), `--cpus`, `--memory`, `--pids-limit`, `--cap-drop ALL`,
+  `no-new-privileges`, rootfs de solo lectura, usuario 1000, kill al agotar el tiempo, límite de
+  tamaño del workspace, limpieza desde el propio sandbox. `InProcessExecutor` solo para tests.
+- Orquestador (`jobs/orchestrator.py`): clona en el host con el token de solo lectura en una
+  cabecera (nunca en disco ni en el contenedor), construye el spec desde la política materializada
+  (`allowed_actions` = acciones autónomas del `coding_worker`, sin deploy por construcción),
+  reserva presupuesto, lanza, registra el informe en `JobRun`, publica el `ChangeSet` vía
+  `RepoBroker` y destruye el workspace. `manage.py coder_smoke` para el criterio de salida.
+- Prueba real en `jarvis-sandbox` (bug en `calc.add`): clon → `uv sync` → arreglo del mock →
+  `pytest` en verde dentro del contenedor → Draft PR #3 de `app/jarvis-ops-jonas` con solo
+  `calc.py` cambiado y CI en verde. El guard de rutas protegidas se disparó en un intento previo
+  (finales de línea CRLF del clon en Windows hacían aparecer todos los archivos como cambiados;
+  corregido forzando LF).
+- Tests de seguridad: inyección que intenta leer `/proc/self/environ`, `../`, `.git/config` ⇒ el
+  job falla sin PR; escritura en `.github/` bloqueada; límite de turnos; presupuesto agotado bloquea
+  antes de lanzar; el spec nunca contiene acciones de deploy ni credenciales; en Docker: sin
+  secretos ni red, OOM a 64 MiB, `fork` rechazado por `pids-limit`, kill por tiempo, rootfs de
+  solo lectura, y un flujo completo con el contenedor real.
+
+**Pendientes detectados (para fases posteriores)**
+- 3b / ADR-005: `ClaudeCodeAgent`. La interfaz y el registro (`build_agent`) existen; falta decidir
+  la credencial y cómo el agente accede al modelo desde un sandbox sin red (ver alternativas en la
+  ADR-005). Hasta entonces `agent.kind = "claude_code"` devuelve `AgentUnavailable`.
+- Clasificación del ticket (`risk`, `purpose`) sigue fija en `medium`/`fix`; llega con el triage
+  (Fase 5) y alimentará `JobSpec.risk`.
+- Allowlist de egress real (GitHub, modelo, registries) en lugar de "red en `prepare`, nada en
+  `work`"; requiere proxy o reglas de red de la plataforma (Fase 4, ADR-015).
+- El límite de workspace se comprueba al terminar (no como cuota del sistema de archivos); en
+  Railway se revisará con el backend de ejecución (Fase 4).
+- `uv sync` en `prepare` descarga dependencias en cada run (caché por workspace, destruida); valorar
+  una caché compartida de solo lectura cuando haya volumen (Fase 8/9).
+- El worker y el control plane comparten `workers/coder/job_spec.py`; el `Dockerfile` de la API ya
+  copia `workers/` para que la Fase 4 lo despliegue.
+
+**Hito: prototipo local.** ✅ (2026-10-02, con agente mock)
 
 ---
 

@@ -52,6 +52,17 @@ con suscripción han cambiado durante 2026. La API usa créditos prepagados con 
 través de un proxy del `LLMGateway` (el worker no tendría credencial propia y cada llamada pasaría
 por `BudgetGuard` antes de ejecutarse).
 
+**Alternativas presentadas al owner (2026-10-02, tras la Fase 3 con `MockCodingAgent`):**
+
+| Opción | Cómo | A favor | En contra |
+|---|---|---|---|
+| A. Proxy del `LLMGateway` + API key (recomendada) | El sandbox sigue sin red ni credenciales; el agente dentro del contenedor habla con un endpoint local del control plane (socket/host gateway) que aplica `BudgetGuard`, `UsageLedger` y el filtro de secretos antes de llamar a la API de Anthropic con la clave del control plane. | Cumple las reglas 2, 6 y 10 tal cual; coste real por `JobRun`; hard stop por presupuesto en cada llamada; el worker no puede exfiltrar la clave. | Hay que implementar el proxy (Fase 3b) y el agente se construye con el Agent SDK/Messages API contra ese endpoint, no con `claude -p`. |
+| B. API key inyectada en el sandbox | `ANTHROPIC_API_KEY` en el entorno del contenedor con egress permitido solo al endpoint del modelo. | Más simple; permite usar Claude Code/Agent SDK tal cual. | Una credencial de pago dentro del entorno que ejecuta código no confiable (T2); el presupuesto se controlaría a posteriori; exige allowlist de egress real. |
+| C. Suscripción Max (Claude Code en el host) | Ejecutar `claude -p` en el host del control plane con la sesión del owner. | Sin coste por token adicional. | Las condiciones de uso de la suscripción para automatización han cambiado en 2026 y no está claro que permitan uso desatendido; sin medición de coste real en `UsageLedger`; rompe el aislamiento (el agente correría fuera del sandbox). |
+
+Recomendación: **A**. Decisión del owner pendiente; `agent.kind = "claude_code"` devuelve
+`AgentUnavailable` hasta entonces.
+
 ## ADR-006 — PostgreSQL de producción
 **Estado:** Pendiente (Fase 4)
 
@@ -328,3 +339,32 @@ fallos del handler se auditan (`task.failed`) y el evento ya persistido puede re
 **Consecuencias:** el control plane no necesita `git` ni espacio de clonado para publicar; el worker
 (Fase 3) exporta su diff como `ChangeSet`. Cambios binarios grandes pasan por blobs base64 (límite
 de GitHub ~100 MiB por archivo, muy por encima del límite del worker).
+
+## ADR-032 — Sandbox del coding worker: clon en el host, dos fases y exportación como `ChangeSet`
+**Estado:** Aceptada (2026-10-02)
+
+**Contexto:** architecture.md §11 pedía egress denegado por defecto con allowlist y un worker con
+solo un token de lectura. Con Docker local no hay allowlist de hosts sin infraestructura extra, y un
+token en el entorno del contenedor es legible por cualquier script del repo.
+**Decisión:**
+1. El **control plane clona** el repositorio en el workspace con el token de instalación de solo
+   lectura enviado como cabecera `Authorization: basic` (nunca en la URL ni en disco). El contenedor
+   **no recibe ninguna credencial**: ni GitHub, ni modelo, ni base de datos.
+2. El worker corre en **dos fases**, un contenedor por fase sobre el mismo workspace montado:
+   `prepare` (comandos `install` del manifest, con red para registries) y `work` (agente + tests,
+   `--network none`). Ambas con `--cpus`, `--memory`/`--memory-swap`, `--pids-limit`, `--cap-drop
+   ALL`, `no-new-privileges`, rootfs de solo lectura, usuario 1000 y kill al agotar el tiempo. El
+   tamaño del workspace se mide al terminar y el workspace se destruye desde el propio sandbox.
+3. El worker **no hace commit ni push**: exporta los archivos cambiados (`git status` contra el
+   commit base) como `AgentReport.files`; el orquestador los convierte en el `ChangeSet` de la
+   ADR-031 y el `RepoBroker` crea el commit y el Draft PR. El veredicto de los tests lo toma el
+   runner, nunca el agente.
+4. Los clones y el `git status` fuerzan `core.autocrlf=false`, `core.eol=lf`, `core.filemode=false`
+   y `core.symlinks=false` para que un control plane en Windows y un worker en Linux vean el mismo
+   árbol.
+5. `InProcessExecutor` ejecuta el mismo runner en el host sin aislamiento: solo para tests y
+   desarrollo de confianza, nunca para repos de terceros.
+**Consecuencias:** T2 queda mitigada de forma más fuerte que lo documentado (cero credenciales en el
+sandbox). El egress permitido durante `prepare` es amplio: la allowlist real y el aislamiento de
+producción siguen pendientes (ADR-015, Fase 4). El agente con modelo (ADR-005) necesitará un canal
+hacia el `LLMGateway` que no sea red abierta.

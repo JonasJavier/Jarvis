@@ -292,7 +292,9 @@ comandos del repositorio (install/test/build) se ejecutan con un entorno saneado
 Sin credenciales de deploy, producción, base de datos, WhatsApp ni Gmail.
 
 **Ejecución:** `WorkerExecutor` es una abstracción. Desarrollo: `LocalDockerExecutor` aplicando estos
-límites. Producción: **pendiente** hasta la guía de deployment (ADR-015). No se depende de
+límites en dos fases (`prepare` con red para instalar dependencias, `work` sin red para el agente y
+los tests), con el clon hecho por el control plane y **ninguna credencial dentro del contenedor**
+(ADR-032). Producción: **pendiente** hasta la guía de deployment (ADR-015). No se depende de
 características específicas de ningún proveedor de nube.
 
 ## 12. JobSpec (contrato worker ↔ control plane)

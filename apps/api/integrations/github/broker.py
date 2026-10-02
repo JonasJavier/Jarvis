@@ -67,6 +67,10 @@ class RepoBroker:
         self._engine = engine
         self._idempotency = idempotency or IdempotencyService()
 
+    @property
+    def host(self) -> RepoHost:
+        return self._host
+
     def connection_for(self, project: Project) -> RepositoryConnection:
         connection = (
             RepositoryConnection.objects.select_related("project__client")
