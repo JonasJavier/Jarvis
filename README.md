@@ -23,7 +23,10 @@ efímeros y aislados** que usan Claude solo cuando hace falta.
 
 ## Estado
 
-Fase actual: **Fase 0 — Documentación y fundamentos** (ver [plan de implementación](docs/implementation-plan.md)).
+Fase 0 (documentación y fundamentos) completada. Siguiente: **Fase 1A**, pendiente de autorización
+del owner (ver [plan de implementación](docs/implementation-plan.md)).
+
+Desarrollo local con Docker; producción prevista en Railway.
 
 ## Documentación
 

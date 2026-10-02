@@ -1,0 +1,16 @@
+# Manifest de cliente. Un archivo por cliente. Sin secretos.
+version: 1
+
+client:
+  id: example-client
+  name: Example Client
+
+contacts:                           # se normalizan (E.164 / email conservador) y se comparan exactamente
+  - type: whatsapp
+    value: "+18095550100"
+  - type: email
+    value: soporte@example.com
+
+budget:                             # no puede superar global.yaml
+  daily_usd: 8.00
+  monthly_usd: 75.00

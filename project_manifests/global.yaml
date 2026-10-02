@@ -1,0 +1,57 @@
+# Configuración global: techos que ningún cliente o proyecto puede superar.
+# Fuente de verdad versionada (ADR-017). Sin secretos.
+version: 1
+
+timezone: America/Santo_Domingo     # periodos diarios/mensuales de presupuesto
+
+budgets:                            # servicios de pago por uso (IA, WhatsApp, APIs)
+  daily_usd: 15.00
+  monthly_usd: 200.00
+  alert_thresholds_pct: [50, 70, 80, 90, 100]
+
+limits:
+  concurrent_ai_jobs: 2
+
+worker_limits:                      # por seguridad y estabilidad (architecture.md §11)
+  default:
+    cpu: 2
+    memory_mib: 4096
+    pids: 512
+    timeout_seconds: 2400
+    workspace_gib: 10
+    max_file_mib: 50
+    max_output_mib: 10
+    max_retries: 1
+    max_turns: 12
+  ceiling:
+    cpu: 4
+    memory_mib: 8192
+    pids: 1024
+    timeout_seconds: 5400
+    workspace_gib: 20
+    max_file_mib: 100
+    max_retries: 2
+    max_turns: 30
+  network:
+    default: deny
+    allow:                          # categorías; los hosts concretos se definen al implementar
+      - github
+      - model_endpoint
+      - package_registries_install_only
+      - jarvis_repo_broker
+
+approvals:
+  default_ttl_minutes: 60
+
+forbidden:                          # prohibido para todos, no sobrescribible
+  - expose_secret
+  - disable_audit_logging
+  - access_other_client_projects
+  - modify_ci
+  - modify_policy
+
+protected_paths:                    # una tarea de código nunca puede modificarlas
+  - ".github/"
+  - "project_manifests/"
+  - "tests/security/"
+  - "infra/"
