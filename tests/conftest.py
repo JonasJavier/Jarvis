@@ -31,6 +31,12 @@ def read_yaml(path: Path) -> dict[str, Any]:
     return data
 
 
+# Repository declared by the example project manifest (tests must not hardcode it).
+EXAMPLE_REPOSITORY: str = read_yaml(EXAMPLE_MANIFESTS / "projects" / "example.yaml")["project"][
+    "repository"
+]
+
+
 def write_yaml(path: Path, data: dict[str, Any]) -> None:
     path.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True), encoding="utf-8")
 

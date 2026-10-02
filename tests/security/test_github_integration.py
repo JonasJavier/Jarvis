@@ -32,12 +32,13 @@ from jobs.models import CIStatus, Job
 from jobs.services import create_job
 from policies.engine import PolicyEngine
 from projects.models import Project
+from tests.conftest import EXAMPLE_REPOSITORY
 from tickets.models import InboundEvent, Ticket, TicketStatus
 from tickets.states import transition
 
 pytestmark = pytest.mark.django_db
 
-REPO = "my-org/example"
+REPO = EXAMPLE_REPOSITORY
 APP_ID = 12345
 SECRET = "test-webhook-secret"
 
@@ -305,7 +306,7 @@ def deliver(
 
 def repo_payload(**extra: Any) -> dict[str, Any]:
     return {
-        "repository": {"full_name": "My-Org/Example", "private": True},
+        "repository": {"full_name": REPO.upper(), "private": True},
         "installation": {"id": 42},
         "sender": {"login": "someone", "email": "secret@example.com"},
         **extra,
@@ -354,7 +355,7 @@ def test_malformed_requests_are_rejected(client: Client) -> None:
 
 
 def test_valid_delivery_is_stored_once_and_processed_once(client: Client, project: Project) -> None:
-    payload = repo_payload(action="created", repositories=[{"full_name": "My-Org/Example"}])
+    payload = repo_payload(action="created", repositories=[{"full_name": REPO.upper()}])
     first = deliver(client, "installation", payload, delivery="abc-1")
     assert first.status_code == 202 and first.json() == {"status": "accepted"}
     second = deliver(client, "installation", payload, delivery="abc-1")
@@ -376,7 +377,7 @@ def test_installation_removal_deactivates_connections(
     deliver(
         client,
         "installation_repositories",
-        repo_payload(action="removed", repositories_removed=[{"full_name": "my-org/example"}]),
+        repo_payload(action="removed", repositories_removed=[{"full_name": REPO}]),
     )
     connection.refresh_from_db()
     assert not connection.is_active

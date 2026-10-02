@@ -5,7 +5,7 @@ from typing import Any
 import pytest
 
 from policies.manifests.loader import ManifestError, load_bundle
-from tests.conftest import EXAMPLE_MANIFESTS, Mutator
+from tests.conftest import EXAMPLE_MANIFESTS, EXAMPLE_REPOSITORY, Mutator
 
 Edit = Callable[[str, Mutator], None]
 GLOBAL = "global.yaml"
@@ -112,7 +112,7 @@ def test_file_name_must_match_id(manifests_dir: Path) -> None:
 def test_duplicate_repository_is_rejected(
     manifests_dir: Path, add_project: Callable[..., None]
 ) -> None:
-    add_project("second", client_id="example-client", repository="My-Org/Example")
+    add_project("second", client_id="example-client", repository=EXAMPLE_REPOSITORY.upper())
     assert_rejected(manifests_dir, "repository is also declared by project")
 
 

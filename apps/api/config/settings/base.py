@@ -4,6 +4,7 @@ Nothing here assumes a specific hosting provider (ADR-001).
 """
 
 import os
+import re
 from pathlib import Path
 
 import dj_database_url
@@ -29,7 +30,8 @@ def env_bool(name: str, default: bool = False) -> bool:
 
 
 def env_list(name: str, default: str = "") -> list[str]:
-    return [item.strip() for item in env(name, default).split(",") if item.strip()]
+    # Comma- or whitespace-separated: "a,b" and "a b" both work.
+    return [item for item in re.split(r"[,\s]+", env(name, default)) if item]
 
 
 SECRET_KEY = env("DJANGO_SECRET_KEY")
@@ -141,6 +143,8 @@ LOGGING = {
 # webhook is rejected. The private key may be passed with literal "\\n" sequences.
 GITHUB_APP_ID = env("GITHUB_APP_ID", "")
 GITHUB_APP_PRIVATE_KEY = env("GITHUB_APP_PRIVATE_KEY", "")
+# Alternative to the inline PEM: path of the key file (kept outside the repository).
+GITHUB_APP_PRIVATE_KEY_FILE = env("GITHUB_APP_PRIVATE_KEY_FILE", "")
 GITHUB_WEBHOOK_SECRET = env("GITHUB_WEBHOOK_SECRET", "")
 GITHUB_API_URL = env("GITHUB_API_URL", "https://api.github.com")
 JARVIS_REPO_HOST = env("JARVIS_REPO_HOST")  # fake | github

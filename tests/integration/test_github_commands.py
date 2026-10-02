@@ -11,6 +11,7 @@ from integrations.github.host import FakeRepoHost, ProtectionStatus
 from integrations.models import RepositoryConnection
 from jobs.models import Job
 from projects.models import Project
+from tests.conftest import EXAMPLE_REPOSITORY
 from tickets.models import Ticket, TicketStatus
 
 pytestmark = pytest.mark.django_db
@@ -34,7 +35,7 @@ def run(*args: str) -> str:
 
 def test_connect_repository_command(project: Project) -> None:
     output = run("connect_repository", "--project", "example", "--installation", "77")
-    assert "Connected my-org/example" in output
+    assert f"Connected {EXAMPLE_REPOSITORY}" in output
     connection = RepositoryConnection.objects.get(repository=project.repository)
     assert connection.project == project and connection.installation_id == 77
     with pytest.raises(CommandError):

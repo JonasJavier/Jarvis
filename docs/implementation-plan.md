@@ -21,7 +21,7 @@ sesión. Los modelos y migraciones son incrementales: cada fase crea solo lo que
 | 0 | Documentación y fundamentos | ✅ Completada | — |
 | 1A | Scaffold del control plane | ✅ Completada y revisada | 5–8 h |
 | 1B | Núcleo de seguridad: política, aprobaciones, presupuesto, idempotencia | ✅ Completada — pendiente revisión del owner | 10–14 h |
-| 2 | Integración GitHub App | ✅ Código completo — pendiente prueba real y revisión del owner | 15–25 h |
+| 2 | Integración GitHub App | ✅ Completada y probada en real — pendiente revisión del owner | 15–25 h |
 | 3 | Coding worker local (mock → Claude) | ⏳ Pendiente | 20–35 h |
 | 4 | Despliegue de Jarvis en producción (Railway) | ⏳ Pendiente — guía recibida ([railway.md](railway.md)) | 8–14 h |
 | 5 | WhatsApp Cloud API | ⏳ Pendiente | 12–20 h |
@@ -213,11 +213,21 @@ verde. Implementado en la app `integrations`:
   CI en `Job.ci_status` y en el `Ticket` (`pull_request → ci`; fallo ⇒ `investigating`).
 - `manage.py github_smoke --project X --ref N`: el job manual del criterio de salida, idempotente.
 
-**Prueba real pendiente (requiere al owner):** crear la GitHub App privada con los permisos de
-permissions-and-approvals.md, instalarla solo en un repo de prueba con Ruleset (PR obligatorio,
-required check, sin bypass), configurar `JARVIS_REPO_HOST=github`, `GITHUB_APP_ID`,
-`GITHUB_APP_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET` y un túnel, y ejecutar `connect_repository` +
-`github_smoke`. El código no se da por validado en producción hasta entonces.
+**Prueba real (2026-10-02):** GitHub App privada `jarvis-ops-jonas` (App ID 5168220) con los 5
+permisos mínimos, instalada solo en `JonasJavier/jarvis-sandbox` (público, porque los Rulesets en
+repos privados de cuentas personales exigen GitHub Pro). Ruleset `protect-main`: PR obligatorio,
+check `ci` requerido, sin borrado ni force push, lista de bypass vacía. Resultados:
+- `github_smoke --ref prueba-1` creó la rama `jarvis/1-1` y el Draft PR #1 firmado por
+  `app/jarvis-ops-jonas`, con un solo archivo y el check `ci` en verde.
+- Repetir el comando devolvió `reused=True` para rama y PR: una rama, un PR.
+- Con el Ruleset desactivado temporalmente, `github_smoke --ref prueba-2` fue rechazado por el
+  preflight ("pull requests are not required…; no required status checks") sin crear nada; el
+  Ruleset se reactivó después.
+- Webhook en real (servidor local + túnel smee): dos peticiones con firma inválida ⇒ 401 y
+  `webhook.rejected` auditados; al relanzar el CI del PR #1 llegaron `check_run` (created,
+  completed) y `check_suite` (completed) con 202, `Job.ci_status` pasó a `success` y el ticket de
+  `pull_request` a `ci` con `ci.result` auditado. Solo se persistió el resumen tipado de cada
+  evento. **Criterios de salida de la Fase 2 cumplidos en real.**
 
 **Pendientes detectados (para fases posteriores)**
 - 3: el worker exporta sus cambios como `ChangeSet` (diff del worktree) para el broker; el token de
@@ -229,6 +239,13 @@ required check, sin bypass), configurar `JARVIS_REPO_HOST=github`, `GITHUB_APP_I
   issue (no es un `Contact`).
 - Preflight: se evalúa en cada publicación; falta re-evaluarlo periódicamente y alertar si un repo
   pierde su protección (Fase 9).
+- **Límite de GitHub:** los Rulesets y la protección de ramas en repositorios **privados** requieren
+  GitHub Pro (cuentas personales) o Team (organizaciones). Un repo privado de un cliente en plan Free
+  no puede cumplir el preflight y Jarvis se negará a operar. Decidir por proyecto (plan de pago del
+  cliente, repo en una organización con Team, o una salvaguarda alternativa que requeriría ADR)
+  antes de incorporar clientes reales (Fase 6).
+- `GITHUB_APP_PRIVATE_KEY_FILE` permite leer la clave desde un archivo fuera del repo; en Railway
+  (Fase 4) se usará la variable inline `GITHUB_APP_PRIVATE_KEY`.
 
 ---
 

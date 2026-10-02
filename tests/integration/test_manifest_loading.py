@@ -11,7 +11,7 @@ from policies.manifests.loader import load_bundle
 from policies.manifests.materialize import apply_bundle, detect_drift
 from policies.models import ContractPolicy
 from projects.models import Project
-from tests.conftest import Mutator
+from tests.conftest import EXAMPLE_REPOSITORY, Mutator
 
 pytestmark = pytest.mark.django_db
 
@@ -38,7 +38,7 @@ def test_first_load_materializes_everything(manifests_dir: Path) -> None:
     }
     project = Project.objects.get(slug="example")
     assert project.client == client
-    assert project.repository == "my-org/example"
+    assert project.repository == EXAMPLE_REPOSITORY
     policy = ContractPolicy.objects.get(project=project)
     assert policy.autonomy_level == 2
     assert policy.manifest_hash == load_bundle(manifests_dir).effective_hash("example")
