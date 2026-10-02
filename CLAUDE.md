@@ -4,17 +4,19 @@ Lee este archivo completo antes de cualquier tarea. Es el contrato arquitectóni
 
 ## Misión
 
-Plataforma de operaciones con IA, orientada a eventos, para un negocio de desarrollo de software
-unipersonal que mantiene múltiples proyectos de clientes.
+Un **empleado de IA**, orientado a eventos, para un negocio de desarrollo de software unipersonal.
+Tres roles que se construyen en orden: **Soporte** (Fases 1–10), **Constructor** (Fase 11) y
+**Comercial** (Fase 12). Su autonomía crece por **niveles por proyecto** (0–4).
 
 Jarvis recibe eventos (WhatsApp, Gmail, GitHub, cron), los asocia a cliente/proyecto, aplica
-reglas **deterministas** de política y presupuesto, y **solo entonces** invoca workers de IA.
+reglas **deterministas** de política, autonomía y presupuesto, y **solo entonces** invoca workers de IA.
 
 ```
 Evento -> persistir -> normalizar -> identificar cliente/proyecto -> política
        -> Ticket -> Job -> presupuesto -> (IA opcional) -> worker aislado
        -> branch -> tests -> commit -> Draft PR            (fin del coding worker)
-       -> CI -> staging (componente determinista) -> Approval -> producción -> aviso -> auditoría
+       -> CI -> staging -> producción (según nivel de autonomía o Approval)
+       -> aviso de resolución al cliente (según nivel o Approval) -> auditoría
 ```
 
 ## Cómo trabajamos
@@ -50,9 +52,12 @@ Evento -> persistir -> normalizar -> identificar cliente/proyecto -> política
 4. La autorización la decide código determinista (`PolicyEngine`), nunca un LLM.
 5. Un worker accede a **un solo proyecto por job**.
 6. El coding worker **no tiene credenciales de deployment, de producción ni de base de datos productiva,
-   y nunca despliega**. Su responsabilidad termina en el Draft PR.
-7. Ninguna acción `requires_approval` (incluido deploy a producción) sin un `Approval` vigente, de un
-   solo uso, ligado a su `action_digest`.
+   y nunca despliega**. Su responsabilidad termina en el Draft PR. Jarvis opera producción solo a través
+   de **herramientas controladas** ejecutadas por código determinista; ningún LLM posee credenciales.
+7. La decisión de cada acción sale del **nivel de autonomía del proyecto** + la clase de riesgo de la
+   acción. Ninguna acción `requires_approval` sin un `Approval` vigente, de un solo uso, ligado a su
+   `action_digest`. Las acciones **críticas** (borrar datos, dinero, precios/contratos, IAM/credenciales,
+   cambios de política) requieren aprobación en cualquier nivel.
 8. Ninguna acción destructiva de base de datos ejecutada por un worker de IA.
 9. Todo webhook externo: firma validada + idempotente. Todo efecto secundario externo: idempotency key.
 10. Toda llamada a modelo pasa por `BudgetGuard` (vía `LLMGateway`) y queda en `UsageLedger`.
@@ -81,7 +86,7 @@ Evento -> persistir -> normalizar -> identificar cliente/proyecto -> política
 | [docs/architecture.md](docs/architecture.md) | Arquitectura, componentes, modelo de datos, flujos, límites del worker |
 | [docs/implementation-plan.md](docs/implementation-plan.md) | Fases, entregables, criterios de salida, estado |
 | [docs/threat-model.md](docs/threat-model.md) | Amenazas y mitigaciones |
-| [docs/permissions-and-approvals.md](docs/permissions-and-approvals.md) | Actores, autonomía, aprobaciones, permisos por integración |
+| [docs/permissions-and-approvals.md](docs/permissions-and-approvals.md) | Actores, niveles de autonomía, aprobaciones, permisos por integración, reglas de contacto comercial |
 | [docs/cost-controls.md](docs/cost-controls.md) | Presupuestos, UsageLedger, circuit breakers, routing de modelos |
 | [docs/decisions.md](docs/decisions.md) | Registro de decisiones (ADR) |
 | [project_manifests/](project_manifests/) | Fuente de verdad: `global.yaml`, `clients/*.yaml`, `projects/*.yaml` |

@@ -7,7 +7,8 @@
 | Código fuente de clientes | Filtración, pérdida de confianza, incumplimiento contractual |
 | Secretos (GitHub App key, tokens Meta/Gmail, credencial IA, credenciales de deploy) | Toma de control de integraciones o despliegues |
 | Infraestructura y datos de producción de clientes | Caída de servicio, pérdida de datos |
-| Canal de comunicación con clientes (número WhatsApp, email) | Daño reputacional, promesas no autorizadas |
+| Canal de comunicación con clientes (número WhatsApp, email) | Daño reputacional, promesas no autorizadas, bloqueo del número |
+| Datos de prospectos (rol Comercial) | Incumplimiento de normas de privacidad y anti-spam |
 | Presupuesto de servicios de pago por uso (IA, WhatsApp, APIs) | Facturas inesperadas |
 | Políticas (manifests) y registro de auditoría | Autonomía no autorizada, pérdida de trazabilidad |
 
@@ -37,8 +38,8 @@ amplía permisos. Ejecutar install/test/build de un repo es ejecución de códig
 | T6 | Suplantación o error de identificación | Número/email desconocido, formato distinto, contacto en dos clientes | Normalización canónica (E.164, email conservador) + coincidencia exacta; ambigüedad ⇒ `NeedsIdentification` sin acciones | 1A, 1B, 5, 7 |
 | T7 | Agente desactiva su red de seguridad | Modificar `.github/`, manifests, tests de seguridad | GitHub App sin permiso `workflows`; guard de rutas protegidas; Rulesets con PR obligatorio, required checks y sin bypass; preflight que exige la protección | 2 |
 | T8 | Gasto descontrolado | Loop del agente, CI flaky, avalancha de mensajes | `max_turns`, timeout, `max_retries`, BudgetGuard multi-scope con hard stop, `UsageLedger`, créditos prepagados sin auto-reload, rate limits | 1B, 3, 5 |
-| T9 | Mensaje incorrecto a cliente | LLM promete plazos, precios o cambios de contrato | `OutboundPolicy`: solo categorías seguras en automático; resto como borrador aprobado | 5 |
-| T10 | Cambio de código dañino | Fix incorrecto o regresión | Branch + Draft PR + CI + staging; producción solo con `Approval` | 2, 6 |
+| T9 | Mensaje incorrecto a cliente | LLM promete plazos, precios o cambios de contrato, o anuncia un arreglo que no funciona | Cada mensaje clasificado por clase de riesgo; precios/plazos/contratos siempre `critical`; aviso de resolución solo tras deploy verificado; en nivel 2, borrador aprobado | 5 |
+| T10 | Cambio de código dañino | Fix incorrecto o regresión | Branch + Draft PR + CI + staging; producción según nivel de autonomía (o `Approval`) con health checks y rollback automático | 2, 6 |
 | T11 | Operación destructiva en DB | Migración o script del agente | Worker sin credenciales de DB; migraciones siempre `requires_approval` | 1B, 3 |
 | T12 | Robo de sesión del owner | Token del panel | Verificación del token en backend; allowlist de la identidad del owner; sesiones cortas | 6 |
 | T13 | Código no confiable agota o compromete el worker | Dependencia maliciosa, fork bomb, script de install | Workspace efímero; límites de CPU/RAM/PIDs/disco/tamaño de archivo/tiempo; egress restringido; sin acceso a servicios internos | 3, 4 |
@@ -47,6 +48,11 @@ amplía permisos. Ejecutar install/test/build de un repo es ejecución de códig
 | T16 | Obtención indirecta de credenciales de deploy | Código del PR ejecutado en CI con secretos de deploy disponibles | Jobs de CI que ejecutan código del PR sin secretos; deploy en entornos protegidos separados; staging con credenciales solo de staging; worker nunca despliega | 2, 6 |
 | T17 | Reutilización o desvío de aprobaciones | Aprobar commit X y desplegar commit Y; reutilizar una aprobación | `action_digest` recalculado antes de ejecutar; single-use con `used_at`; `expires_at`; invalidación por cambio de política | 1B, 6 |
 | T18 | Drift de política | Edición directa en Django Admin o base de datos | Manifests versionados como fuente de verdad; modelos materializados de solo lectura; `check_manifests` bloquea ante drift | 1A |
+| T19 | Error de Jarvis operando producción | Deploy defectuoso, restart en mal momento, migración errónea | Catálogo cerrado de `ProductionTools` ejecutado por código determinista; niveles de autonomía; acciones críticas siempre aprobadas; backup previo; health checks + rollback automático; límite de operaciones por hora; alerta por cada acción autónoma | 6 |
+| T20 | Inyección que escala a producción | Mensaje malicioso induce al `ops_agent` a pedir una operación dañina | El LLM solo solicita; `PolicyEngine` decide por nivel y clase de riesgo; operaciones destructivas `critical`; sin credenciales en el agente | 6 |
+| T21 | Bloqueo de número o cuenta por contacto comercial | Mensajes no solicitados por WhatsApp, automatización de DMs en redes | WhatsApp solo con consentimiento y número comercial separado del de soporte; DMs de redes enviados por el owner; rate limits; campañas aprobadas | 12 |
+| T22 | Uso indebido de datos de prospectos | Recolección excesiva, sin base legal, sin baja | Datos mínimos de fuentes públicas de empresas; `ConsentRecord`; baja inmediata; retención limitada | 12 |
+| T23 | MVP generado con vulnerabilidades | Código del rol Constructor sin revisión de seguridad | Scans de seguridad en CI, QA por milestone, especificación aprobada; proyectos con dinero/datos personales requieren revisión del owner antes de producción | 11 |
 
 ## Fallos operativos previsibles
 

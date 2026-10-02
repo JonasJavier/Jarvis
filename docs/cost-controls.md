@@ -90,6 +90,11 @@ reservado a gastado en cada scope y libera la diferencia. Reservas no conciliada
 
 Los periodos diarios y mensuales usan la zona horaria definida en `global.yaml`.
 
+**Roles Constructor y Comercial.** Una `Initiative` (Fase 11) y una `Campaign` (Fase 12) tienen un tope
+propio que se descuenta dentro del presupuesto del proyecto al que pertenecen; no alteran el orden de
+locking. Construir un MVP consume bastante más que arreglar un bug: el tope de la `Initiative` se
+aprueba junto con la especificación.
+
 ## Umbrales y circuit breaker
 
 | Consumo | Acción |

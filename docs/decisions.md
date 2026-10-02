@@ -76,8 +76,13 @@ la Fase 6 (Firebase Auth/Hosting o Django templates, a decidir al iniciar esa fa
 
 **Decisión:** GitHub App privada (no PAT global); Meta WhatsApp Cloud API directa (no Baileys ni
 automatización de navegador); Gmail API con OAuth (no SMTP con contraseña); LinkedIn solo publicación
-con `w_member_social` y fuera del MVP. Gmail requiere un cliente OAuth en un proyecto de Google
+con `w_member_social` (Fase 12). Gmail requiere un cliente OAuth en un proyecto de Google
 (y Pub/Sub si se usa push) por exigencia de la propia API, independientemente del hosting.
+
+**Número de WhatsApp (ampliado 2026-10-01):** Jarvis usa un **número dedicado**, no el número personal
+del owner. Automatizar un número personal requeriría librerías no oficiales (contrarias a los términos
+de WhatsApp, con riesgo de bloqueo del número) y mezclaría vida personal y negocio. El rol Comercial
+usará además un número separado del de soporte (ADR-024).
 
 ## ADR-010 — Identificación: normalización canónica + coincidencia exacta
 **Estado:** Aceptada (ampliada 2026-10-01)
@@ -139,8 +144,8 @@ control de egress).
 **Decisión:** el coding worker termina en `clone → branch → cambios → tests → commit → Draft PR`.
 Recibe solo un token GitHub de solo lectura de un repo; push y PR los hace el RepoBroker. Nunca tiene
 ni puede obtener credenciales de deployment: staging lo inicia `StagingTrigger`/CI con credenciales
-solo de staging, y producción solo `Deployer` con `Approval`. Los jobs de CI que ejecutan código del
-PR no tienen secretos de deploy.
+solo de staging, y producción solo `Deployer` mediante `ProductionTools` (ADR-023). Los jobs de CI que
+ejecutan código del PR no tienen secretos de deploy.
 
 ## ADR-017 — Manifests versionados como fuente de verdad
 **Estado:** Aceptada
@@ -158,7 +163,9 @@ requerirá una ADR nueva sobre sincronización y versionado.
 **Decisión:** además de los controles de Jarvis, cada repo gestionado debe tener Rulesets/branch
 protection: sin pushes directos a la rama por defecto, PR obligatorio, required checks, la GitHub App
 de Jarvis sin bypass, sin permiso `workflows`. Jarvis verifica estas reglas antes de operar.
-**Consecuencias:** un fallo en el código de Jarvis no basta para integrar código no revisado.
+**Consecuencias:** un fallo en el código de Jarvis no basta para integrar código sin pasar por PR y
+CI. Si un proyecto exige además revisión humana obligatoria en el Ruleset, Jarvis no podrá hacer
+merge autónomo aunque su nivel lo permita; es una decisión por proyecto.
 
 ## ADR-019 — Modelos y migraciones incrementales
 **Estado:** Aceptada
@@ -173,3 +180,48 @@ La Fase 1A se limita a `Client`, `Contact`, `Project`, `ContractPolicy` y `Audit
 inmutable. Almacenamiento externo, logging centralizado, export, tamper-evident logging y hash
 chaining quedan como opciones para la Fase 9 / deployment. Sin dependencia de ningún servicio de
 logging de un proveedor concreto.
+
+## ADR-021 — Jarvis como empleado: tres roles
+**Estado:** Aceptada (2026-10-01)
+
+**Contexto:** el objetivo es depender cada vez menos del owner: no solo mantener proyectos, sino
+construirlos y conseguir clientes.
+**Decisión:** tres roles construidos en orden: **Soporte** (Fases 1–10), **Constructor** (Fase 11:
+de idea a MVP con QA y conversación con el cliente) y **Comercial** (Fase 12: prospectos, propuestas,
+demos y contacto). Cada rol reutiliza las piezas del anterior.
+**Consecuencias:** el núcleo de seguridad (Fases 1A–1B) es aún más importante: más autonomía exige
+más barreras deterministas, no menos.
+
+## ADR-022 — Niveles de autonomía por proyecto
+**Estado:** Aceptada (2026-10-01)
+
+**Decisión:** cada proyecto declara `autonomy_level` (0–4) en su manifest. Cada acción tiene una clase
+de riesgo (`read`, `internal`, `low`, `medium`, `high`, `critical`) fijada en código. El
+`PolicyEngine` decide nivel × clase; las acciones `critical` requieren siempre aprobación; las
+prohibiciones globales y el techo por actor prevalecen. Nivel 4 solo para `ownership: internal`
+salvo ADR explícita. Nivel inicial recomendado para clientes: 2.
+**Consecuencias:** reemplaza la matriz fija "MVP / futuro". Subir de nivel es un cambio revisado del
+manifest, respaldado por el informe de confianza (Fase 10).
+
+## ADR-023 — Acceso de Jarvis a producción mediante herramientas controladas
+**Estado:** Aceptada (2026-10-01)
+
+**Contexto:** el owner quiere que Jarvis pueda ver y modificar producción de los proyectos.
+**Decisión:** Jarvis lee producción (logs, métricas, errores sanitizados) desde el inicio y opera
+producción mediante un catálogo cerrado de `ProductionTools` (deploy, rollback, restart, migración
+con backup, configuración no sensible), ejecutado por el `Deployer` determinista. Los agentes LLM
+(`ops_agent`) solo solicitan herramientas; nunca poseen credenciales ni shell libre en producción.
+Salvaguardas: backup previo, rollback automático, límite de operaciones por hora, alerta al owner.
+**Consecuencias:** producción puede operarse de forma autónoma según el nivel del proyecto sin que
+un error del modelo o una inyección tengan acceso directo a credenciales. Mantiene ADR-016: el coding
+worker sigue sin desplegar.
+
+## ADR-024 — Reglas de contacto comercial
+**Estado:** Aceptada (2026-10-01)
+
+**Decisión:** el owner aprueba cada campaña (público, plantilla, canal, volumen). WhatsApp solo con
+contactos con consentimiento y desde un número comercial separado; email cumpliendo normas anti-spam;
+mensajes privados en LinkedIn/redes redactados por Jarvis y enviados por el owner; solo se automatiza
+lo permitido por APIs oficiales. Datos de prospectos mínimos, públicos y con baja respetada.
+**Consecuencias:** el alcance comercial es menor que un "envío masivo", pero protege el número de
+soporte, las cuentas del owner y el cumplimiento legal.

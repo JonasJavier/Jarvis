@@ -38,7 +38,7 @@ observabilidad) se deciden en la fase de deployment siguiendo la guía del owner
                                             ▼
               GitHub Actions (árbitro determinista) ► StagingTrigger ► Staging
                                             ▼
-                        Approval del owner ► Deployer ► Producción
+     PolicyEngine (nivel de autonomía o Approval) ► Deployer/ProductionTools ► Producción
 ```
 
 ## 2. Actores
@@ -53,7 +53,24 @@ en código que ningún manifest puede ampliar.
 | `coding_worker` | Leer repo, editar worktree, ejecutar tests/lint, commit, solicitar branch/Draft PR al broker | Desplegar (staging o prod), leer secretos, merge, tocar `.github/`/manifests |
 | `ci` | Tests, lint, scans, build sobre el PR | Usar credenciales de deploy en jobs que ejecutan código del PR |
 | `staging_trigger` | Desplegar a staging un commit con CI en verde | Producción |
-| `deployer` | Desplegar a producción | Actuar sin `Approval` consumido para ese `action_digest` |
+| `ops_agent` (LLM) | Diagnosticar producción con lecturas sanitizadas; **solicitar** herramientas de producción | Poseer credenciales; ejecutar nada directamente |
+| `client_agent` (LLM) | Conversar con clientes en lenguaje natural; redactar mensajes | Enviar sin pasar por `OutboundPolicy`; comprometer precios/plazos/contratos |
+| `deployer` | Ejecutar `ProductionTools` (deploy, rollback, restart, migración con backup) | Actuar sin decisión del `PolicyEngine` (nivel de autonomía o `Approval` consumido) |
+
+### Niveles de autonomía
+
+Cada proyecto declara en su manifest un `autonomy_level` (0–4). Cada acción tiene una **clase de
+riesgo** fijada en código. El `PolicyEngine` decide: nivel del proyecto × clase de riesgo, con
+prohibiciones y acciones críticas globales que prevalecen. Detalle en
+[permissions-and-approvals.md](permissions-and-approvals.md#niveles-de-autonomía).
+
+| Nivel | Jarvis… |
+|---|---|
+| 0 — Observa | Lee, diagnostica e informa al owner |
+| 1 — Propone | Prepara PRs y borradores; el owner aprueba cada acción externa |
+| 2 — Actúa en lo seguro | Autónomo en staging y mensajes de bajo riesgo; pide aprobación para producción |
+| 3 — Actúa e informa | Autónomo en producción de bajo/medio riesgo con rollback; informa después |
+| 4 — Autónomo | Todo salvo acciones críticas; inicialmente solo proyectos internos |
 
 ## 3. Componentes
 
@@ -72,8 +89,11 @@ en código que ningún manifest puede ampliar.
 | RepoBroker | Emitir tokens de solo lectura por repo; push de branch y Draft PR con token propio | No |
 | StagingTrigger | Desplegar a staging tras CI en verde (determinista o vía CI) | No |
 | ApprovalService | Crear, aprobar, invalidar y consumir aprobaciones (§9) | No |
-| Deployer | Desplegar a producción con identidad separada, solo tras `Approval` | No |
-| Outbound Gateway | Enviar mensajes a clientes aplicando `OutboundPolicy` + idempotencia | No (redacción sí) |
+| ProductionTools | Catálogo cerrado de operaciones de producción (leer logs/métricas/errores sanitizados, deploy, rollback, restart, migración con backup previo) | No |
+| Deployer | Ejecutar `ProductionTools` con identidad separada, solo con decisión favorable del `PolicyEngine` | No |
+| Ops Agent | Diagnosticar incidencias de producción y solicitar herramientas | Sí |
+| Client Agent | Conversación con clientes: acuses, preguntas, avisos de resolución en lenguaje natural | Sí |
+| Outbound Gateway | Enviar mensajes aplicando `OutboundPolicy` + nivel de autonomía + idempotencia | No |
 | Audit | `AuditEvent` append-only a nivel de aplicación | No |
 
 ## 4. Interfaces (adapters)
@@ -153,6 +173,8 @@ orientativas y se revisan al llegar a esa fase.
 | 5 | `Conversation`, `Message` |
 | 6 | `Deployment` |
 | 8 | `MaintenanceRun` |
+| 11 | `Initiative` (idea → MVP), `Milestone` |
+| 12 | `Prospect`, `Campaign`, `OutreachMessage`, `ConsentRecord` |
 
 ```
 Client 1──* Contact (valor normalizado, único por tipo)
@@ -200,7 +222,9 @@ Nunca se usa fuzzy matching ni un LLM para autorizar acciones sobre un proyecto.
 ## 9. Aprobaciones
 
 - `action_digest = sha256(JSON canónico de {project_id, action, target/environment, subject_ref
-  (commit SHA o artifact digest), params relevantes, manifest_hash})`.
+  (commit SHA, artifact digest o hash del texto del mensaje), params relevantes, manifest_hash})`.
+- Solo se crea una aprobación cuando el `PolicyEngine` devuelve `requires_approval` (por nivel de
+  autonomía insuficiente o por acción crítica).
 - **Single-use:** se consume atómicamente (`used_at`) al iniciar la ejecución y queda ligada a la
   idempotency key de esa ejecución. Una redelivery de la misma ejecución continúa; una ejecución
   nueva requiere aprobación nueva.
@@ -292,7 +316,14 @@ proyecto + ticket + archivos relevantes; nunca con datos de otros clientes.
   jobs/entornos separados y protegidos (p. ej. GitHub Environments con reglas de protección).
 - **Staging:** lo inicia `StagingTrigger` (determinista) o CI tras checks en verde, con credenciales
   solo de staging. Staging no contiene datos ni credenciales reales de producción.
-- **Producción:** solo `Deployer`, solo con `Approval` consumido para el `action_digest` exacto.
+- **Producción:** solo `Deployer`, ejecutando `ProductionTools`, cuando el `PolicyEngine` lo permite:
+  autónomo si el nivel del proyecto cubre la clase de riesgo de la acción, o con `Approval` consumido
+  para el `action_digest` exacto. Acciones críticas: siempre con `Approval`.
+- **Lectura de producción:** logs, métricas y errores accesibles a Jarvis desde el inicio, siempre
+  sanitizados (sin secretos, datos personales minimizados). Lectura de datos de la base productiva:
+  solo vía herramientas acotadas y de solo lectura (diseño en Fase 6).
+- **Salvaguardas:** backup antes de operaciones de riesgo, rollback automático si fallan los health
+  checks tras un deploy, ventana de verificación post-deploy.
 
 ## 14. Máquinas de estado
 
@@ -304,9 +335,13 @@ Received → Identified → Classified ─┬→ SupportOnly → ReplyDraft → 
    └→ NeedsIdentification           │                            └→ NeedsQuote → WaitingOwner
                                     ├→ FeatureRequest → NeedsQuote → WaitingOwner
                                     └→ NeedsClarification → WaitingClient
-PullRequest → CI → Staging → WaitingApproval → Production → ClientNotified → Closed
+PullRequest → CI → Staging → [WaitingApproval] → Production → ResolutionNotice → ClientNotified → Closed
 Cualquier estado → Escalated (humano) · Failed
 ```
+
+`WaitingApproval` solo aparece si el nivel de autonomía no cubre el deploy. `ResolutionNotice`: el
+`client_agent` redacta un aviso breve, humano y sencillo ("Listo, ya corregimos el error al
+registrar pagos; puedes intentarlo de nuevo"); se envía directamente o tras aprobación según el nivel.
 
 **Job**
 
@@ -358,3 +393,43 @@ frontend/dashboard/  (Fase 6) panel del owner
 docs/                documentación
 tests/               unit · integration · security
 ```
+
+## 18. Rol Constructor (Fase 11)
+
+Convierte una idea en un MVP reutilizando las piezas del rol Soporte (jobs, coding worker, CI,
+staging, `ProductionTools`, `client_agent`).
+
+```
+Idea (owner o cliente) → Initiative → especificación (PRD) ──[Approval del owner]──►
+plan de milestones → por cada milestone: jobs del coding worker → Draft PR → CI → staging
+→ QA (tests e2e + revisión en navegador sobre staging) → demo al cliente/owner
+→ feedback por conversación → siguiente milestone → producción (según nivel)
+```
+
+- Creación del repositorio: desde una plantilla, como acción que requiere aprobación (la GitHub App
+  no recibe permisos de administración de la organización).
+- Cada milestone tiene presupuesto propio dentro del presupuesto de la `Initiative`.
+- La conversación con el cliente (requisitos, dudas, demos) la lleva el `client_agent`; cambios de
+  alcance, precios y plazos requieren aprobación.
+- Proyectos internos del owner (`ownership: internal`) pueden operar con nivel de autonomía alto
+  antes que los de clientes.
+
+## 19. Rol Comercial (Fase 12)
+
+Busca y contacta clientes potenciales para un producto o servicio.
+
+```
+Producto/MVP → definición del cliente ideal → investigación de prospectos (información pública de
+empresas) → propuesta + demo personalizada → contacto por canal permitido → seguimiento →
+conversación con interesados → entrega al owner o al rol Constructor
+```
+
+Reglas de canal (detalle en [permissions-and-approvals.md](permissions-and-approvals.md#contacto-comercial)):
+
+- **WhatsApp:** solo con personas que dieron su consentimiento (opt-in), desde un número comercial
+  dedicado, nunca el número de soporte de clientes ni un número personal.
+- **Email:** primer contacto permitido cumpliendo normas anti-spam (identificación del remitente,
+  opción de baja, volumen limitado).
+- **LinkedIn / redes:** Jarvis redacta mensajes y publicaciones; el owner envía los mensajes
+  privados. Solo se automatiza lo que permitan las APIs oficiales (p. ej. publicaciones).
+- Datos de prospectos: mínimos, de fuentes públicas, con baja respetada y retención limitada.

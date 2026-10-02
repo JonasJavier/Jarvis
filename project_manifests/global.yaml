@@ -43,6 +43,11 @@ worker_limits:                      # por seguridad y estabilidad (architecture.
 approvals:
   default_ttl_minutes: 60
 
+autonomy:                           # niveles 0–4 (ADR-022)
+  max_level_client_projects: 3
+  max_level_internal_projects: 4
+  production_ops_per_hour: 10       # límite de operaciones de producción autónomas por proyecto
+
 forbidden:                          # prohibido para todos, no sobrescribible
   - expose_secret
   - disable_audit_logging

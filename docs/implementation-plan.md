@@ -29,10 +29,16 @@ sesión. Los modelos y migraciones son incrementales: cada fase crea solo lo que
 | 7 | Gmail | ⏳ Pendiente | 10–18 h |
 | 8 | Mantenimiento mensual | ⏳ Pendiente | 15–25 h |
 | 9 | Hardening y observabilidad | ⏳ Pendiente | 20–40 h |
-| 10 | Autonomía gradual | 🔁 Continuo | — |
+| 10 | Autonomía gradual (subir niveles con evidencia) | 🔁 Continuo | — |
+| 11 | Rol Constructor: de idea a MVP | ⏳ Pendiente | 40–70 h |
+| 12 | Rol Comercial: prospectos, propuestas y contacto | ⏳ Pendiente | 30–50 h |
 
-Hitos: **prototipo local** al terminar Fase 3 · **MVP usable con clientes** al terminar Fase 6 ·
-**operación confiable** tras Fase 9. Las estimaciones no incluyen esperas de aprobación de Meta/Google.
+Roles: **Soporte** (Fases 1–10) → **Constructor** (11) → **Comercial** (12). Cada rol reutiliza lo
+construido en el anterior; el orden importa: primero arreglar bien, luego construir bien, luego vender.
+
+Hitos: **prototipo local** al terminar Fase 3 · **MVP de soporte usable con clientes** al terminar
+Fase 6 · **operación confiable** tras Fase 9 · **Jarvis constructor** tras Fase 11 · **Jarvis
+comercial** tras Fase 12. Las estimaciones no incluyen esperas de aprobación de Meta/Google.
 
 ---
 
@@ -58,7 +64,8 @@ proyecto de ejemplo), `.env.example`, `.gitignore`.
 - Modelos y migraciones **solo**: `Client`, `Contact`, `Project`, `ContractPolicy` (materializada,
   con `manifest_hash` y commit de origen), `AuditEvent` (append-only a nivel de aplicación).
 - Normalización canónica de contactos (E.164, email conservador) con unicidad por valor normalizado.
-- Esquemas pydantic para `global.yaml`, `clients/*.yaml`, `projects/*.yaml`; validación de techos globales.
+- Esquemas pydantic para `global.yaml`, `clients/*.yaml`, `projects/*.yaml` (incluye `ownership` y
+  `autonomy_level`; nivel 4 solo con `ownership: internal`); validación de techos globales.
 - `manage.py load_manifests` (materializa y audita) y `manage.py check_manifests` (detecta drift).
 - Django admin: modelos materializados en **solo lectura**; `AuditEvent` sin edición ni borrado.
 - GitHub Actions `ci.yml`: ruff, mypy, pytest con Postgres de servicio.
@@ -81,8 +88,9 @@ proyecto de ejemplo), `.env.example`, `.gitignore`.
 **Alcance**
 - Modelos: `InboundEvent`, `Ticket`, `Job`, `JobRun`, `Approval`, `Budget`, `BudgetReservation`,
   `UsageLedger`, `IdempotencyRecord`.
-- `PolicyEngine`: `evaluate(actor, action, project) -> Decision`. Deny by default; techo de
-  capacidades por actor en código (el `coding_worker` nunca puede recibir acciones de deploy).
+- `PolicyEngine`: `evaluate(actor, action, project) -> Decision`. Deny by default; catálogo de
+  acciones con clase de riesgo; nivel de autonomía × clase; acciones críticas siempre con aprobación;
+  techo de capacidades por actor en código (el `coding_worker` nunca puede recibir acciones de deploy).
 - `ProjectResolver`: contacto normalizado → cliente/proyecto; ambigüedad ⇒ `NeedsIdentification`.
 - `ApprovalService`: `action_digest`, single-use (`used_at`), `expires_at`, invalidación por cambio
   de target/commit/artifact/parámetros/política, consumo atómico.
@@ -97,10 +105,13 @@ proyecto de ejemplo), `.env.example`, `.gitignore`.
 **Tests obligatorios (`tests/security/`)**
 - Acción `forbidden` nunca se ejecuta; acción desconocida ⇒ `forbidden`; el actor `coding_worker`
   no obtiene acciones de deploy aunque un manifest las liste.
+- Cada nivel de autonomía permite exactamente sus clases de riesgo; una acción `critical` requiere
+  aprobación incluso en nivel 4; `restrict` del manifest solo endurece; nivel 4 en proyecto de cliente
+  es rechazado.
 - `requires_approval` falla sin `Approval`; funciona con uno válido; falla si cambia commit, target,
   parámetros o `manifest_hash`; falla si expiró; falla en el segundo uso; un `Approval` de otro
   proyecto no sirve.
-- Deploy a producción sin aprobación es imposible.
+- Deploy a producción sin aprobación es imposible cuando el nivel del proyecto no lo cubre (nivel ≤ 2).
 - Presupuesto agotado en cualquier scope bloquea el job; el circuit breaker global detiene todo;
   reservas concurrentes no sobrepasan el límite.
 - Evento duplicado no crea ticket ni job duplicado; un efecto con la misma idempotency key no se repite.
@@ -186,11 +197,16 @@ separadas por identidad (`control_plane`, `coding_worker`, `deployer`).
 
 ## Fase 5 — WhatsApp Cloud API
 
-**Requisitos previos del owner:** cuenta Meta Business, WABA, número verificado, app de Meta con
-`whatsapp_business_messaging`; revisar tarifas vigentes de Meta (ver [cost-controls.md](cost-controls.md#whatsapp)).
+**Requisitos previos del owner:** cuenta Meta Business, WABA, **número dedicado** a Jarvis (no el
+personal; ver ADR-009), app de Meta con `whatsapp_business_messaging`; revisar tarifas vigentes de
+Meta (ver [cost-controls.md](cost-controls.md#whatsapp)).
 
 **Alcance**
 - Modelos `Conversation`, `Message`.
+- `client_agent`: respuestas en lenguaje natural, breves, humanas y sencillas; clasificación de cada
+  mensaje por clase de riesgo (enviar directo o borrador para aprobación según nivel).
+- **Aviso de resolución:** cuando un ticket llega a producción, Jarvis redacta el aviso al cliente
+  ("Listo, ya corregimos…"); en nivel 2 queda para aprobación del owner, en nivel 3+ se envía solo.
 - Webhook: verificación de suscripción, validación `X-Hub-Signature-256`, dedupe por message id.
 - `WhatsAppCloudProvider` (implementa `MessagingProvider`); estados de entrega vía webhook.
 - Identificación por teléfono E.164 exacto; no identificado ⇒ `NeedsIdentification` + alerta.
@@ -199,23 +215,32 @@ separadas por identidad (`control_plane`, `coding_worker`, `deployer`).
 - Notificaciones al owner (PR listo, aprobaciones pendientes).
 - Rate limit de mensajes salientes con corte automático ante anomalías.
 
-**Criterios de salida:** mensaje de prueba → ticket → acuse → job → Draft PR → aviso al owner;
-mensaje con intento de inyección no altera permisos; reentrega del webhook no duplica respuestas.
+**Criterios de salida:** mensaje de prueba → ticket → acuse → job → Draft PR → aviso al owner →
+aviso de resolución al cliente (aprobado o autónomo según nivel); mensaje con intento de inyección no
+altera permisos; reentrega del webhook no duplica respuestas; ningún mensaje con precio o plazo sale
+sin aprobación.
 
 ---
 
-## Fase 6 — Aprobaciones, despliegues de clientes y panel
+## Fase 6 — Aprobaciones, producción de clientes y panel
 
 **Alcance**
 - Modelo `Deployment`; `DeployTarget` por proyecto (mecanismo según hosting de cada cliente).
 - `StagingTrigger`: deploy a staging tras CI en verde, con credenciales solo de staging.
-- `Deployer`: producción solo con `Approval` consumido para el `action_digest`.
+- `ProductionTools` + `Deployer`: deploy, rollback, restart, migración con backup; ejecutados solo con
+  decisión favorable del `PolicyEngine` (nivel de autonomía o `Approval` consumido).
+- Lectura de producción para Jarvis: logs, métricas y errores sanitizados; diseño de lectura acotada
+  de datos productivos con minimización de datos personales.
+- `ops_agent`: diagnóstico de incidencias de producción que solicita herramientas, sin credenciales.
+- Salvaguardas: backup previo, health checks + rollback automático, límite de operaciones por hora,
+  alerta al owner por cada acción autónoma en producción.
 - Verificar que los workflows de CI de cada proyecto separan tests (sin secretos) de deploy (entorno protegido).
 - Panel del owner (Firebase Auth + Hosting, o Django templates — decidir al iniciar): integraciones,
   cola, tickets, presupuesto/uso, proyectos, "Needs You" con aprobar/rechazar, trazabilidad por ticket.
 
 **Criterios de salida:** el owner aprueba un deploy desde el panel; cualquier cambio posterior del
-commit invalida la aprobación; la acción queda auditada con su identidad.
+commit invalida la aprobación; en un proyecto de prueba en nivel 3, un deploy fallido se revierte solo;
+toda acción queda auditada con su identidad.
 
 **Hito: MVP usable con clientes.**
 
@@ -261,17 +286,67 @@ IA caída, presupuesto agotado) documentado y superado.
 
 ## Fase 10 — Autonomía gradual (continuo)
 
-Medir por tipo de acción: propuestas aprobadas sin cambios vs. corregidas vs. rechazadas. Una acción
-pasa de `requires_approval` a `autonomous` (cambio en el manifest versionado) solo si cumple **todo**:
-tasa de éxito demostrada en un periodo definido, tests sólidos, rollback probado, blast radius
-pequeño y una ADR que lo registre.
+Medir por proyecto y por clase de riesgo: propuestas aprobadas sin cambios vs. corregidas vs.
+rechazadas, incidencias y rollbacks. El panel muestra un **informe de confianza** que sugiere subir
+(o bajar) el `autonomy_level`. Subir de nivel es un cambio en el manifest versionado que el owner
+revisa, y solo procede con: tasa de éxito demostrada en un periodo definido, tests sólidos, rollback
+probado y blast radius aceptable. Las acciones `critical` nunca pasan a autónomas por esta vía.
+
+---
+
+## Fase 11 — Rol Constructor: de idea a MVP
+
+**Objetivo:** "Jarvis, encárgate de este proyecto": Jarvis convierte una idea en un MVP funcionando,
+probado y publicado, conversando con el cliente (o con el owner) durante el proceso.
+
+**Requisitos previos:** Fases 1–9 operativas; al menos un proyecto de soporte estable en nivel ≥ 2.
+Primer piloto con un **proyecto interno** del owner (p. ej. un sistema de préstamos).
+
+**Alcance**
+- Modelos `Initiative`, `Milestone`.
+- Intake de idea → especificación (PRD) con preguntas de clarificación → **aprobación del owner**.
+- Plantillas de proyecto (stack preferido del owner); creación de repo desde plantilla como acción con
+  aprobación; manifest del nuevo proyecto generado y revisado por el owner.
+- Plan por milestones; cada milestone: jobs del coding worker → Draft PR → CI → staging.
+- **QA:** tests e2e y revisión en navegador sobre staging; informe de QA por milestone.
+- Demos: enlace de staging + resumen en lenguaje natural para el cliente/owner.
+- Ciclo de feedback por conversación (`client_agent`); cambios de alcance, precio o plazo: aprobación.
+- Presupuesto por `Initiative` y por milestone.
+
+**Criterios de salida:** a partir de una idea escrita, Jarvis entrega un MVP interno publicado, con
+tests en verde, informe de QA y demo; el owner solo intervino en las aprobaciones definidas.
+
+**Nota:** proyectos con dinero o datos personales (p. ej. préstamos) tienen requisitos legales y de
+cumplimiento que el owner debe validar; Jarvis los señala en la especificación, no los resuelve.
+
+---
+
+## Fase 12 — Rol Comercial: prospectos, propuestas y contacto
+
+**Objetivo:** a partir de un producto o MVP, Jarvis encuentra clientes potenciales, prepara
+propuestas y demos, y los contacta respetando las reglas de cada canal.
+
+**Requisitos previos del owner:** número de WhatsApp comercial separado del de soporte; dominio/email
+de envío configurado para outreach; revisión de normas anti-spam y de protección de datos aplicables.
+
+**Alcance**
+- Modelos `Prospect`, `Campaign`, `OutreachMessage`, `ConsentRecord`.
+- Definición del cliente ideal → investigación de prospectos con información pública de empresas.
+- Propuesta y demo personalizadas (reutiliza staging/demos de la Fase 11).
+- **Campañas aprobadas por el owner** (público, plantilla, canal, volumen máximo); mensajes dentro de
+  la campaña según nivel de autonomía.
+- Canales: email con remitente identificado y baja; WhatsApp solo con consentimiento y número
+  comercial; LinkedIn/redes: borradores que envía el owner, publicaciones vía API oficial.
+- Seguimiento y conversación con interesados (`client_agent`); traspaso al owner o a la Fase 11.
+- Rate limits por canal, presupuesto por campaña, respeto inmediato de bajas.
+
+**Criterios de salida:** una campaña piloto aprobada genera propuestas y contactos sin incumplir las
+reglas de canal; las bajas se respetan; cada contacto queda auditado.
 
 ---
 
 ## Backlog (sin fase asignada)
 
-- LinkedIn: login + publicación con `w_member_social`. Sin DMs ni scraping.
 - Worker local privado para proyectos que no deben ir a la nube.
 - `MicrosoftGraphProvider` para clientes con Outlook.
-- Auto-merge para categorías de riesgo muy bajo (depende de Fase 10).
 - Edición de políticas desde el panel (requiere ADR de sincronización/versionado).
