@@ -30,10 +30,28 @@ aislados** que usan Claude solo cuando hace falta. Jarvis actúa en producción 
 
 ## Estado
 
-Fase 0 (documentación y fundamentos) completada. Siguiente: **Fase 1A**, pendiente de autorización
+Fase 1A (scaffold del control plane) completada. Siguiente: **Fase 1B**, pendiente de autorización
 del owner (ver [plan de implementación](docs/implementation-plan.md)).
 
 Desarrollo local con Docker; producción prevista en Railway.
+
+## Desarrollo local
+
+Requisitos: Docker y [uv](https://docs.astral.sh/uv/).
+
+```bash
+docker compose up --build          # API en http://localhost:8000 + Postgres en el puerto 55432
+uv sync                            # entorno de desarrollo
+uv run pytest                      # tests (requiere el Postgres de compose en marcha)
+uv run ruff check . && uv run mypy apps/api tests
+```
+
+Comandos de política (desde `apps/api/`):
+
+```bash
+uv run python manage.py load_manifests     # valida y carga project_manifests/
+uv run python manage.py check_manifests    # falla si la base de datos difiere de los manifests
+```
 
 ## Documentación
 
@@ -43,4 +61,5 @@ Desarrollo local con Docker; producción prevista en Railway.
 - [Permisos, autonomía y aprobaciones](docs/permissions-and-approvals.md)
 - [Control de costos](docs/cost-controls.md)
 - [Registro de decisiones](docs/decisions.md)
+- [Despliegue en Railway](docs/railway.md)
 - [Contrato para Claude Code](CLAUDE.md)

@@ -150,8 +150,15 @@ project_manifests/
   projects/<project_id>.yaml proyecto, contrato, política, budget, agente, comunicaciones
 ```
 
-- `load_manifests` valida con esquema estricto y **materializa** en PostgreSQL (`ContractPolicy`
-  etc.), guardando `manifest_hash` y commit de origen.
+- `load_manifests` valida con esquema estricto y **materializa** en PostgreSQL (`Client`, `Contact`,
+  `Project`, `ContractPolicy`), guardando hashes y commit de origen. La validación es todo-o-nada:
+  un error en cualquier archivo rechaza el conjunto. Las claves YAML duplicadas se rechazan.
+- `global.yaml` no tiene tabla propia: se valida en cada carga y su hash entra en el
+  `manifest_hash` efectivo de cada `ContractPolicy` (global + cliente + proyecto), que es el usado en
+  los `action_digest`. Los hashes ignoran formato y comentarios.
+- Un cliente o proyecto que desaparece de los manifests se **desactiva** (no se borra); los contactos
+  de un cliente desactivado se eliminan para que no pueda ser identificado. La auditoría registra
+  conteos de contactos, nunca sus valores.
 - Un proyecto nunca puede superar los techos de `global.yaml`; un valor fuera de rango invalida el manifest.
 - Los modelos materializados son **solo lectura en Django Admin**. `check_manifests` detecta drift
   entre archivos y base de datos; con drift, el proyecto queda bloqueado para acciones no triviales
@@ -372,7 +379,7 @@ se decide en la fase de deployment.
 
 | Entorno | Estado |
 |---|---|
-| Local | `docker compose` (API + Postgres), `InProcessQueue`, `LocalDockerExecutor`, `.env` local no versionado |
+| Local | `docker compose` (API + Postgres en el puerto 55432 del host), `InProcessQueue`, `LocalDockerExecutor`, `.env` local no versionado |
 | Producción | **Railway.** Servicios, networking, workers, cron, volúmenes, Postgres, secretos, dominios, escalado y observabilidad: **pendientes** de la guía de deployment del owner |
 
 Identidades lógicas separadas en cualquier entorno: `control_plane`, `coding_worker`, `deployer`,

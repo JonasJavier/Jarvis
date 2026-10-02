@@ -34,9 +34,10 @@ Evento -> persistir -> normalizar -> identificar cliente/proyecto -> política
 - Python 3.13+, `uv`, Django + Django REST Framework, PostgreSQL
 - pytest + pytest-django, ruff, mypy
 - Desarrollo local: Docker / docker compose
-- Producción: **Railway**. El procedimiento de despliegue, la cola de producción, el Postgres de
-  producción, los secretos, el cron y el aislamiento de workers en producción están **pendientes**:
-  **no se implementan hasta recibir la guía de deployment del owner.**
+- Producción: **Railway**, siguiendo [docs/railway.md](docs/railway.md) en la Fase 4. Nada se
+  despliega antes. La cola de producción, el aislamiento de workers en producción, el cron y la
+  observabilidad siguen **pendientes**. **Prohibido operar OMSTA y OMSTA-Demo** en Railway; todo
+  comando de Railway usa `--project` explícito o un token de proyecto.
 - GitHub App + GitHub Actions; Meta WhatsApp Cloud API; Gmail API
 - Firebase opcional para Auth/Hosting del panel (Fase 6); no aloja el backend.
 - IA: Claude (Claude Code / Agent SDK / API) **siempre detrás de `LLMGateway` y `CodingAgent`**
@@ -89,4 +90,5 @@ Evento -> persistir -> normalizar -> identificar cliente/proyecto -> política
 | [docs/permissions-and-approvals.md](docs/permissions-and-approvals.md) | Actores, niveles de autonomía, aprobaciones, permisos por integración, reglas de contacto comercial |
 | [docs/cost-controls.md](docs/cost-controls.md) | Presupuestos, UsageLedger, circuit breakers, routing de modelos |
 | [docs/decisions.md](docs/decisions.md) | Registro de decisiones (ADR) |
+| [docs/railway.md](docs/railway.md) | Despliegue en Railway: acceso, topología, variables, prohibiciones |
 | [project_manifests/](project_manifests/) | Fuente de verdad: `global.yaml`, `clients/*.yaml`, `projects/*.yaml` |

@@ -1,0 +1,71 @@
+[project]
+name = "jarvis-ops"
+version = "0.1.0"
+description = "Event-driven AI operations platform for a software development business"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "dj-database-url>=3.1.2",
+    "django>=6.1.1",
+    "django-stubs-ext>=6.1.1",
+    "djangorestframework>=3.18.1",
+    "phonenumbers>=9.0.40",
+    "psycopg[binary]>=3.3.6",
+    "pydantic>=2.13.5",
+    "pyyaml>=6.0.3",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings.test"
+pythonpath = ["apps/api"]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+extend-exclude = ["**/migrations/*", "docs"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "UP", "S", "DJ", "SIM", "RUF"]
+ignore = ["RUF012"]  # Django Meta/admin class attributes are idiomatic lists
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["config", "clients", "projects", "policies", "audit"]
+
+[tool.mypy]
+python_version = "3.13"
+mypy_path = "apps/api"
+strict = true
+plugins = ["mypy_django_plugin.main", "pydantic.mypy"]
+exclude = ["migrations/"]
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+
+[tool.django-stubs]
+django_settings_module = "config.settings.test"
+
+[tool.coverage.run]
+source = ["apps/api"]
+omit = ["*/migrations/*", "*/settings/*", "apps/api/manage.py", "apps/api/config/*sgi.py"]
+
+[dependency-groups]
+dev = [
+    "django-stubs[compatible-mypy]>=6.1.1",
+    "djangorestframework-stubs[compatible-mypy]>=3.18.1",
+    "mypy>=2.3.1",
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+    "pytest-django>=4.14.0",
+    "ruff>=0.16.10",
+    "types-pyyaml>=6.0.12.20260906",
+]

@@ -16,6 +16,9 @@ usarse para Auth/Hosting del panel, no para el backend.
 workers, cron, volúmenes, PostgreSQL, secretos, dominios, deployment, escalado y observabilidad.
 **Consecuencias:** la lógica de dominio no depende de Railway; todo lo específico de infraestructura
 queda detrás de interfaces (`TaskQueue`, `WorkerExecutor`, `DeployTarget`, configuración por entorno).
+**Guía recibida (2026-10-01):** adaptada en `docs/railway.md`. Fija acceso (token de proyecto),
+servicio web con pre-deploy de migraciones y prohibición de operar OMSTA/OMSTA-Demo desde este
+repositorio. Cola, aislamiento de workers, cron y observabilidad siguen pendientes.
 
 ## ADR-002 — Django + DRF + PostgreSQL como control plane
 **Estado:** Aceptada
@@ -54,6 +57,8 @@ por `BudgetGuard` antes de ejecutarse).
 
 **Opciones:** Railway PostgreSQL u otra alternativa si hay una razón técnica clara (backups,
 point-in-time recovery, red privada, latencia).
+**Propuesta (2026-10-01):** Railway PostgreSQL, conectado por referencia `${{Postgres.DATABASE_URL}}`
+según la guía del owner. Se confirma en Fase 4 tras revisar backups y recuperación.
 
 ## ADR-007 — Django admin como panel provisional
 **Estado:** Aceptada
@@ -68,7 +73,7 @@ la Fase 6 (Firebase Auth/Hosting o Django templates, a decidir al iniciar esa fa
 **Decisión:**
 1. Fundamentos divididos en **1A (scaffold y dominio mínimo)** y **1B (núcleo de seguridad)**.
 2. **Despliegue de Jarvis en Railway como fase propia (4)**, antes de WhatsApp: el número comercial no
-   debe depender de un túnel hacia el PC. Bloqueada hasta recibir la guía del owner.
+   debe depender de un túnel hacia el PC. Sigue la guía del owner (`docs/railway.md`).
 3. Staging/producción de proyectos de clientes en la Fase 6, junto con aprobaciones y panel.
 
 ## ADR-009 — Canales oficiales
@@ -225,3 +230,13 @@ mensajes privados en LinkedIn/redes redactados por Jarvis y enviados por el owne
 lo permitido por APIs oficiales. Datos de prospectos mínimos, públicos y con baja respetada.
 **Consecuencias:** el alcance comercial es menor que un "envío masivo", pero protege el número de
 soporte, las cuentas del owner y el cumplimiento legal.
+
+## ADR-025 — Base técnica de la Fase 1A
+**Estado:** Aceptada (2026-10-01)
+
+**Decisión:** Python 3.13 (fijado en `.python-version`), Django 6.1, DRF 3.18, Pydantic 2 para los
+esquemas de manifests, `phonenumbers` para E.164, `dj-database-url` para leer `DATABASE_URL` sin
+asumir proveedor. DRF sin clases de autenticación: ningún endpoint de negocio es accesible hasta la
+Fase 1B. `global.yaml` no se materializa en tabla propia; entra en el hash efectivo de cada política.
+**Consecuencias:** el mismo `DATABASE_URL` sirve en local, CI y producción. Los tests usan PostgreSQL
+real (no SQLite) para que el comportamiento coincida con producción.

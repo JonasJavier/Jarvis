@@ -19,11 +19,11 @@ sesión. Los modelos y migraciones son incrementales: cada fase crea solo lo que
 | Fase | Nombre | Estado | Estimación |
 |---|---|---|---|
 | 0 | Documentación y fundamentos | ✅ Completada | — |
-| 1A | Scaffold del control plane | ⏳ Pendiente | 5–8 h |
+| 1A | Scaffold del control plane | ✅ Completada — pendiente revisión del owner | 5–8 h |
 | 1B | Núcleo de seguridad: política, aprobaciones, presupuesto, idempotencia | ⏳ Pendiente | 10–14 h |
 | 2 | Integración GitHub App | ⏳ Pendiente | 15–25 h |
 | 3 | Coding worker local (mock → Claude) | ⏳ Pendiente | 20–35 h |
-| 4 | Despliegue de Jarvis en producción (Railway) | 🔒 Bloqueada: requiere guía del owner | según guía |
+| 4 | Despliegue de Jarvis en producción (Railway) | ⏳ Pendiente — guía recibida ([railway.md](railway.md)) | 8–14 h |
 | 5 | WhatsApp Cloud API | ⏳ Pendiente | 12–20 h |
 | 6 | Aprobaciones, despliegues de clientes y panel | ⏳ Pendiente | 15–25 h |
 | 7 | Gmail | ⏳ Pendiente | 10–18 h |
@@ -78,6 +78,18 @@ proyecto de ejemplo), `.env.example`, `.gitignore`.
 - `check_manifests` detecta una modificación manual en base de datos (test).
 - Teléfonos y emails equivalentes se normalizan al mismo valor; valores ambiguos se rechazan (tests).
 - CI en verde.
+
+**Resultado (2026-10-01):** criterios cumplidos localmente: 74 tests (unit, integración, seguridad),
+cobertura 94 %, ruff + mypy estricto en verde, `docker compose up` sirve `/healthz`. El CI se
+ejecutará en GitHub con el primer push.
+
+**Pendientes detectados (para fases posteriores)**
+- 1B: validar `restrict` contra el catálogo de acciones; aplicar en runtime los techos de
+  `global.yaml`; bloquear acciones no triviales en proyectos con drift (`detect_drift` ya existe).
+- 5: los `wa_id` de WhatsApp llegan sin `+`; anteponerlo antes de normalizar.
+- 4: servidor WSGI/ASGI de producción, ficheros estáticos del admin y `SECURE_HSTS_PRELOAD`
+  (el `Dockerfile` actual usa `runserver`, solo para desarrollo).
+- `factory-boy` no se añadió: aún no hace falta.
 
 ---
 
@@ -179,8 +191,15 @@ el worker no posee ninguna credencial de deploy.
 
 ## Fase 4 — Despliegue de Jarvis en producción (Railway)
 
-**🔒 Bloqueada hasta que el owner entregue la guía de deployment en Railway.** No se implementa
-infraestructura de producción antes.
+**Guía del owner recibida (2026-10-01) y adaptada en [railway.md](railway.md).** Se sigue en esta
+fase, en su orden; no se despliega nada antes.
+
+**Alcance**
+- Cambios de código de [railway.md §3](railway.md#3-cambios-de-código-necesarios-antes-del-primer-deploy-fase-4):
+  gunicorn, whitenoise, `CSRF_TRUSTED_ORIGINS`, `Dockerfile` de producción, `railway.toml`.
+- Proyecto `jarvis-ops` (con permiso del owner), Railway PostgreSQL, servicio `api` desde GitHub,
+  pre-deploy con migraciones y `load_manifests`, healthcheck `/healthz`.
+- Token de proyecto para toda operación posterior a la creación.
 
 **Decisiones a tomar en esta fase** (se presentan alternativas y consecuencias antes de cambiar la arquitectura):
 - Implementación de producción de `TaskQueue` (ADR-003).
@@ -188,7 +207,7 @@ infraestructura de producción antes.
 - Ejecución aislada de workers en producción y cómo se cumplen los límites de §11 (ADR-015).
 - Servicios, networking, cron/scheduler, volúmenes, secretos, dominios, escalado.
 - Observabilidad y destino de logs/auditoría.
-- CI/CD de Jarvis hacia Railway.
+- CI/CD de Jarvis hacia Railway (deploy en cada push a `main` y relación con el CI de GitHub).
 
 **Criterio de salida:** flujo de la Fase 3 funcionando en producción con el PC apagado; credenciales
 separadas por identidad (`control_plane`, `coding_worker`, `deployer`).
