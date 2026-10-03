@@ -23,7 +23,7 @@ sesión. Los modelos y migraciones son incrementales: cada fase crea solo lo que
 | 1B | Núcleo de seguridad: política, aprobaciones, presupuesto, idempotencia | ✅ Completada — pendiente revisión del owner | 10–14 h |
 | 2 | Integración GitHub App | ✅ Completada y probada en real — pendiente revisión del owner | 15–25 h |
 | 3 | Coding worker local (mock → Claude) | ✅ Completada y probada en real, incluida la 3b (proxy + Claude Code en el sandbox) — pendiente revisión del owner | 20–35 h |
-| 4 | Despliegue de Jarvis en producción (Railway) | ✅ Desplegado y verificado (`jarvis-ops`): API, worker y PostgreSQL en Railway; job de producción ejecutado por el runner del PC (PR #6) — pendiente secretos del owner, webhook a producción y revisión | 8–14 h |
+| 4 | Despliegue de Jarvis en producción (Railway) | ✅ Completada y verificada (`jarvis-ops`): API, worker y PostgreSQL en Railway con secretos; webhook de la GitHub App apuntando a producción y procesado por el worker; job de producción ejecutado por el runner del PC (PR #6) — pendiente revisión del owner | 8–14 h |
 | 5 | WhatsApp Cloud API | ⏳ Pendiente | 12–20 h |
 | 6 | Aprobaciones, despliegues de clientes y panel | ⏳ Pendiente | 15–25 h |
 | 7 | Gmail | ⏳ Pendiente | 10–18 h |
@@ -379,6 +379,12 @@ producción lo ejecutó el PC (`run_worker --kinds job --once`, conectado por el
 de datos) y abrió el Draft PR #6 en una rama nueva (`jarvis/2-2-<correlation>`), tests en verde,
 coste real reconciliado en `UsageLedger`. El criterio de salida queda cumplido con el runner fuera
 de Railway.
+
+**Webhooks en producción (2026-10-03):** el owner definió `GITHUB_APP_PRIVATE_KEY`,
+`GITHUB_WEBHOOK_SECRET` y `ANTHROPIC_API_KEY` en el servicio `api`; la URL del webhook de la
+GitHub App pasó de smee a `https://api-production-6221.up.railway.app/webhooks/github`. Una
+reentrega de `check_run` devolvió 202 en producción, quedó como `InboundEvent` con auditoría
+`webhook.accepted` y la procesó el servicio `worker` de Railway desde la cola duradera.
 
 **Pendientes detectados (para fases posteriores)**
 - Runner remoto con Docker (VPS) para que los jobs de código no dependan del PC; mismo comando.
