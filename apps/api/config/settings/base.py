@@ -168,3 +168,8 @@ if not ANTHROPIC_API_KEY and (_key_file := env("ANTHROPIC_API_KEY_FILE", "")):
     ANTHROPIC_API_KEY = Path(_key_file).read_text(encoding="utf-8").strip()
 ANTHROPIC_API_URL = env("ANTHROPIC_API_URL", "https://api.anthropic.com")
 JARVIS_LLM_PROXY_TARGET = env("JARVIS_LLM_PROXY_TARGET", "host.docker.internal:8000")
+
+# Task queue (ADR-003): `inprocess` for development/tests, `postgres` in production.
+JARVIS_TASK_QUEUE = env("JARVIS_TASK_QUEUE")
+# Agent used for queued coding jobs: mock | claude_code | auto (claude_code when a key exists).
+JARVIS_CODER_AGENT = env("JARVIS_CODER_AGENT", "auto")

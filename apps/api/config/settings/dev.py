@@ -7,6 +7,7 @@ os.environ.setdefault("JARVIS_IDENTITY_VERIFIER", "identity.verifier.FakeVerifie
 os.environ.setdefault("JARVIS_LLM_PROVIDER", "fake")
 os.environ.setdefault("JARVIS_REPO_HOST", "fake")
 os.environ.setdefault("JARVIS_WORKER_EXECUTOR", "docker")
+os.environ.setdefault("JARVIS_TASK_QUEUE", "inprocess")
 os.environ.setdefault("JARVIS_LLM_MODEL_CHEAP", "fake-small")
 os.environ.setdefault("JARVIS_LLM_MODEL_CODING", "fake-coding")
 os.environ.setdefault("JARVIS_LLM_MODEL_REASONING", "fake-large")

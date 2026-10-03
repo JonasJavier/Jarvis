@@ -12,3 +12,7 @@ htmlcov
 docs
 tests
 .workspaces
+node_modules
+.railway
+package.json
+package-lock.json

@@ -1,0 +1,8 @@
+{
+  "name": "jarvis-ops-infra",
+  "private": true,
+  "description": "Tooling only: the Railway IaC SDK used to evaluate .railway/railway.ts",
+  "devDependencies": {
+    "railway": "latest"
+  }
+}

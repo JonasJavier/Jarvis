@@ -73,6 +73,38 @@ class Job(models.Model):
         return self.attempts <= self.max_retries
 
 
+class TaskStatus(models.TextChoices):
+    QUEUED = "queued"
+    RUNNING = "running"
+    DONE = "done"
+    FAILED = "failed"
+    DEAD = "dead"
+
+
+class QueuedTaskRow(models.Model):
+    """A durable task of the production `PostgresQueue` (ADR-003)."""
+
+    kind = models.CharField(max_length=32, db_index=True)  # inbound_event, job, ...
+    ident = models.CharField(max_length=128)
+    idempotency_key = models.CharField(max_length=255, unique=True)
+    status = models.CharField(max_length=16, choices=TaskStatus.choices, default=TaskStatus.QUEUED)
+    attempts = models.PositiveSmallIntegerField(default=0)
+    max_attempts = models.PositiveSmallIntegerField(default=5)
+    run_after = models.DateTimeField(db_index=True)
+    locked_at = models.DateTimeField(null=True, blank=True)
+    locked_by = models.CharField(max_length=64, blank=True)
+    last_error = models.CharField(max_length=500, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["run_after", "id"]
+        indexes = [models.Index(fields=["status", "run_after"], name="queued_task_due_idx")]
+
+    def __str__(self) -> str:
+        return f"{self.kind}:{self.ident} [{self.status}]"
+
+
 class JobRunStatus(models.TextChoices):
     STARTED = "started"
     SUCCEEDED = "succeeded"

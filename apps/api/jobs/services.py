@@ -98,7 +98,7 @@ def check_budget_and_queue(job: Job, *, guard: BudgetGuard, queue: TaskQueue) ->
         return job
     guard.release(probe)
     transition(job, JobStatus.QUEUED, actor=ACTOR)
-    queue.enqueue(str(job.pk), idempotency_key=f"launch:{job.pk}:{job.attempts + 1}")
+    queue.enqueue(f"job:{job.pk}", idempotency_key=f"launch:{job.pk}:{job.attempts + 1}")
     return job
 
 

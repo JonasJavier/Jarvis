@@ -69,7 +69,9 @@ def test_job_lifecycle_with_budget_and_queue(
     queue = InProcessQueue()
     check_budget_and_queue(job, guard=BudgetGuard(pricing=pricing), queue=queue)
     assert job.status == JobStatus.QUEUED
-    assert [t.idempotency_key for t in queue.pending] == [f"launch:{job.pk}:1"]
+    assert [(t.job_id, t.idempotency_key) for t in queue.pending] == [
+        (f"job:{job.pk}", f"launch:{job.pk}:1")
+    ]
 
     run = start_run(job)
     assert (run.attempt, run.idempotency_key) == (1, f"launch:{job.pk}:1")

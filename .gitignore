@@ -47,3 +47,6 @@ Thumbs.db
 
 # Ephemeral worker workspaces (Phase 3)
 .workspaces/
+
+# Railway IaC tooling (Node)
+node_modules/

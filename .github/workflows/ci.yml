@@ -62,6 +62,9 @@ jobs:
         working-directory: apps/api
         run: uv run python manage.py load_manifests --validate-only --settings=config.settings.test
 
+      - name: Build control-plane image
+        run: docker build -t jarvis-api:ci .
+
       - name: Build worker sandbox image
         run: docker build -f workers/coder/Dockerfile -t jarvis-worker:dev .
 
