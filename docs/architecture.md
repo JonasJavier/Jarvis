@@ -253,7 +253,7 @@ una vez. Cada efecto secundario externo usa un `IdempotencyRecord` (`started` �
 | Creación de ticket | `ticket:{source}:{external_id}` |
 | Creación de job | `job:{ticket_id}:{purpose}` |
 | Lanzamiento de worker | `launch:{job_id}:{attempt}` (+ `unique(job, attempt)`) |
-| Branch | nombre determinista `jarvis/{ticket_id}-{job_id}`; si existe, se reutiliza |
+| Branch | nombre determinista `jarvis/{ticket_id}-{job_id}-{correlation_id[:8]}` (único entre bases de datos); si existe, se reutiliza |
 | Draft PR | `pr:{repo}:{branch}`; se consulta PR abierto antes de crear |
 | Mensaje outbound | `out:{conversation}:{ticket}:{purpose}:{seq}` |
 | Deploy a staging | `deploy:staging:{project}:{commit_sha}` |

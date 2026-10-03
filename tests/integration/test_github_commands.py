@@ -58,7 +58,7 @@ def test_smoke_creates_one_draft_pr_and_is_idempotent(
     assert len(fake_host.repos[project.repository].pull_requests) == 1
     job = Job.objects.get()
     assert job.ticket.status == TicketStatus.PULL_REQUEST
-    assert job.pr_number == 1 and job.branch == f"jarvis/{job.ticket_id}-{job.pk}"
+    assert job.pr_number == 1 and job.branch.startswith(f"jarvis/{job.ticket_id}-{job.pk}-")
     files = fake_host.repos[project.repository].files[job.head_sha]
     assert "jarvis-smoke.md" in files
 

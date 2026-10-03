@@ -205,7 +205,7 @@ verde. Implementado en la app `integrations`:
   commits vía Git Data API a partir de un `ChangeSet` (ADR-031); PRs siempre en borrador.
 - `RepoBroker`: política (`create_branch`, `request_draft_pr` autónomas), preflight de Rulesets
   (PR obligatorio, required checks, sin bypass para la App), guard de rutas protegidas, branch
-  determinista `jarvis/{ticket}-{job}` reutilizada si existe, PR abierto consultado antes de crear;
+  determinista `jarvis/{ticket}-{job}-{correlation[:8]}` reutilizada si existe, PR abierto consultado antes de crear;
   `worker_token()` solo de lectura.
 - Webhook `POST /webhooks/github`: HMAC `X-Hub-Signature-256` (sin secreto configurado ⇒ todo
   rechazado), dedupe por `X-GitHub-Delivery`, solo se guarda un resumen tipado del payload, 202 y
@@ -369,6 +369,12 @@ con Docker fuera de Railway, porque sus contenedores no son privilegiados). `DJA
 cola y aprobaciones viven en Railway 24/7. La ejecución del agente de código necesita un runner con
 Docker (`run_worker --kinds job`), hoy el PC del owner; sin él, los jobs esperan en la cola. Un VPS
 pequeño con Docker ejecutando la misma imagen cerraría el hueco (decisión pendiente, con coste).
+
+**Hallazgo de la prueba en producción:** el primer job de la base de producción (ids 1/1) reutilizó la
+rama `jarvis/1-1` y el PR #1 creados por la base local en la Fase 2: los nombres de rama derivaban
+de ids locales que se repiten entre entornos. Corregido añadiendo el prefijo del `correlation_id`
+del ticket al nombre de la rama (único entre bases de datos); el job 1 de producción queda como
+falso positivo documentado.
 
 **Pendientes detectados (para fases posteriores)**
 - Runner remoto con Docker (VPS) para que los jobs de código no dependan del PC; mismo comando.

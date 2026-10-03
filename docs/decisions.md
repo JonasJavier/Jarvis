@@ -331,7 +331,7 @@ RepoBroker. Eso exigiría `git` y un clon en el control plane.
 **Decisión:** el broker recibe un `ChangeSet` (commit base + lista de archivos a escribir o borrar +
 mensaje) y `GitHubAppHost` lo convierte en commit con la Git Data API (blobs → tree → commit → ref)
 usando su propio token de instalación. El guard de rutas protegidas se aplica a las rutas del
-`ChangeSet` antes de tocar el host. El nombre de rama es determinista (`jarvis/{ticket}-{job}`); si
+`ChangeSet` antes de tocar el host. El nombre de rama es determinista (`jarvis/{ticket}-{job}-{correlation[:8]}`, único entre entornos); si
 existe se reutiliza; antes de crear un PR se consulta si ya hay uno abierto para esa rama.
 Los tokens de instalación se piden con `repositories` y `permissions` explícitos y la respuesta se
 verifica: si GitHub devuelve más permisos o más repos de los pedidos, el token se descarta.

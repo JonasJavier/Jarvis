@@ -93,7 +93,7 @@ def test_publish_creates_branch_and_draft_pr_once(
     broker: RepoBroker, host: FakeRepoHost, job: Job, changes: ChangeSet, connection: Any
 ) -> None:
     first = broker.publish(job, changes, title="Fix payments", body="Jarvis fix")
-    assert first.branch == f"jarvis/{job.ticket_id}-{job.pk}"
+    assert first.branch == f"jarvis/{job.ticket_id}-{job.pk}-{job.correlation_id[:8]}"
     assert first.pull_request.draft and not first.reused_branch and not first.reused_pull_request
     job.refresh_from_db()
     assert (job.branch, job.head_sha, job.pr_number) == (

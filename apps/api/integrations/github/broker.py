@@ -50,7 +50,9 @@ class PublishResult:
 
 
 def branch_name(job: Job) -> str:
-    return f"jarvis/{job.ticket_id}-{job.pk}"
+    """Deterministic per job, and unique across databases: local ids repeat between environments
+    (the production database restarted at 1), so the ticket's correlation id disambiguates."""
+    return f"jarvis/{job.ticket_id}-{job.pk}-{job.correlation_id[:8]}"
 
 
 class RepoBroker:
