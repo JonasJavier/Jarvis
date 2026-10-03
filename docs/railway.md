@@ -160,6 +160,20 @@ OMSTA-Demo.
 resultado de `/healthz`; nombres de variables definidas y las que faltan (sin valores); estado del
 último deploy; registros DNS pendientes; qué quedó sin verificar.
 
+## 6b. Runner de código fuera de Railway (ADR-034)
+
+Los jobs `job:*` no se ejecutan en Railway. El runner (hoy el PC del owner, mañana un VPS) se
+conecta a la base de datos de producción y consume la cola con el mismo código:
+
+- La base de datos tiene un **proxy TCP** público (servicio `postgres`); `railway run --project
+  <id> --environment <id> --service postgres -- <comando>` inyecta `PG*` y `RAILWAY_TCP_PROXY_*`,
+  con los que el runner compone `DATABASE_URL` sin imprimir nada.
+- El runner usa `config.settings.dev` con `JARVIS_TASK_QUEUE=postgres`, `JARVIS_WORKER_EXECUTOR=docker`
+  y su propio proxy LLM local (`runserver`) como `JARVIS_LLM_PROXY_TARGET`; sus secretos salen de los
+  archivos locales (`ANTHROPIC_API_KEY_FILE`, `GITHUB_APP_PRIVATE_KEY_FILE`), nunca de Railway.
+- Comando: `python manage.py run_worker --kinds job --name <runner>` (`--once` para una sola tarea).
+- Verificado el 2026-10-03: job 2 de producción ⇒ Draft PR #6 en `jarvis-sandbox`.
+
 ## 7. Jarvis operando proyectos de clientes en Railway (Fase 6)
 
 Cuando el `Deployer` (ADR-023) opere proyectos de clientes alojados en Railway:

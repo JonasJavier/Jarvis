@@ -23,7 +23,7 @@ sesión. Los modelos y migraciones son incrementales: cada fase crea solo lo que
 | 1B | Núcleo de seguridad: política, aprobaciones, presupuesto, idempotencia | ✅ Completada — pendiente revisión del owner | 10–14 h |
 | 2 | Integración GitHub App | ✅ Completada y probada en real — pendiente revisión del owner | 15–25 h |
 | 3 | Coding worker local (mock → Claude) | ✅ Completada y probada en real, incluida la 3b (proxy + Claude Code en el sandbox) — pendiente revisión del owner | 20–35 h |
-| 4 | Despliegue de Jarvis en producción (Railway) | ✅ Desplegado (`jarvis-ops`): API, worker y PostgreSQL en Railway; runner de código fuera de Railway — pendiente secretos del owner y revisión | 8–14 h |
+| 4 | Despliegue de Jarvis en producción (Railway) | ✅ Desplegado y verificado (`jarvis-ops`): API, worker y PostgreSQL en Railway; job de producción ejecutado por el runner del PC (PR #6) — pendiente secretos del owner, webhook a producción y revisión | 8–14 h |
 | 5 | WhatsApp Cloud API | ⏳ Pendiente | 12–20 h |
 | 6 | Aprobaciones, despliegues de clientes y panel | ⏳ Pendiente | 15–25 h |
 | 7 | Gmail | ⏳ Pendiente | 10–18 h |
@@ -374,7 +374,11 @@ pequeño con Docker ejecutando la misma imagen cerraría el hueco (decisión pen
 rama `jarvis/1-1` y el PR #1 creados por la base local en la Fase 2: los nombres de rama derivaban
 de ids locales que se repiten entre entornos. Corregido añadiendo el prefijo del `correlation_id`
 del ticket al nombre de la rama (único entre bases de datos); el job 1 de producción queda como
-falso positivo documentado.
+falso positivo documentado. Repetida la prueba con el arreglo: el job 2 encolado en la base de
+producción lo ejecutó el PC (`run_worker --kinds job --once`, conectado por el proxy TCP de la base
+de datos) y abrió el Draft PR #6 en una rama nueva (`jarvis/2-2-<correlation>`), tests en verde,
+coste real reconciliado en `UsageLedger`. El criterio de salida queda cumplido con el runner fuera
+de Railway.
 
 **Pendientes detectados (para fases posteriores)**
 - Runner remoto con Docker (VPS) para que los jobs de código no dependan del PC; mismo comando.
