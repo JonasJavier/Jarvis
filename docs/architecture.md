@@ -395,7 +395,7 @@ Se crea **incrementalmente** según la fase; no se generan carpetas vacías por 
 
 ```
 apps/api/            Django: config, clients, projects, policies, audit (1A); tickets, jobs,
-                     budgets, approvals, idempotency (1B); integrations (2+)
+                     budgets, approvals, idempotency (1B); integrations (2+); messaging (5)
 workers/coder/       runner, job_spec, sandbox, prompts (3)
 integrations/        adapters: anthropic, github, whatsapp, gmail, firebase
 project_manifests/   global.yaml · clients/ · projects/

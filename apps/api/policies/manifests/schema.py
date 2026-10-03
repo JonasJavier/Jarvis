@@ -75,6 +75,8 @@ def _known_actions(values: list[str]) -> list[str]:
 
 class GlobalLimits(Strict):
     concurrent_ai_jobs: Annotated[StrictInt, Field(ge=1, le=20)]
+    # Client messages per project per hour; past it the conversation is cut off (Phase 5).
+    outbound_messages_per_hour: Annotated[StrictInt, Field(ge=1, le=1000)]
 
 
 class WorkerLimitCeiling(Strict):

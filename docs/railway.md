@@ -47,6 +47,7 @@ de clientes en Railway es otra cosa y tiene sus propias reglas (sección 7).
 | Base de datos | `postgres` (`dcfdbf63-ba2f-47c2-9590-94c3fa07034e`), referencia `${{Postgres.DATABASE_URL}}` | Creada (ADR-006) |
 | Cola de producción | `PostgresQueue` en la misma base de datos (ADR-003) | En uso |
 | Ejecución de workers de código | Fuera de Railway (contenedores no privilegiados): runner con Docker (`run_worker --kinds job`), hoy el PC del owner (ADR-015/034) | Decidido |
+| Worker del control plane | `run_worker --kinds inbound_event,outbound_message`: webhooks y respuestas a clientes (Fase 5) | Decidido |
 | Ambiente `staging` de Jarvis | No por ahora: un solo ambiente hasta tener clientes | Decidido |
 | Cron / scheduler | Pendiente (Fase 8): Railway admite cron por servicio (mínimo 5 min, UTC) | Pendiente |
 | Observabilidad y auditoría externa | Logs de Railway por ahora; destino externo en la Fase 9 | Pendiente |
@@ -117,7 +118,14 @@ Solo nombres. Los secretos los define el owner en el dashboard (servicio → Var
 | `JARVIS_SOURCE_COMMIT` | commit desplegado (variable de Railway con el SHA de Git; verificar el nombre en Fase 4) | Agente |
 
 Las credenciales de integraciones (GitHub App, WhatsApp, Gmail, IA) se añaden en sus fases, siempre
-por el owner y con el mecanismo de secretos decidido en la Fase 4.
+por el owner con `railway variables --set` y conservadas por el IaC con `preserve()`.
+
+WhatsApp (Fase 5, ADR-035), solo nombres: `WHATSAPP_PHONE_NUMBER_ID`,
+`WHATSAPP_BUSINESS_ACCOUNT_ID`, `WHATSAPP_ACCESS_TOKEN` (usuario de sistema, sin caducidad),
+`WHATSAPP_APP_SECRET` (firma de webhooks), `WHATSAPP_VERIFY_TOKEN` (alta del webhook) y
+`JARVIS_OWNER_WHATSAPP` (número del owner para avisos). `api` recibe todas; `worker` solo las que
+necesita para responder (`WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_ACCESS_TOKEN`, `JARVIS_OWNER_WHATSAPP`,
+`ANTHROPIC_API_KEY`). URL del webhook en Meta: `https://<dominio del api>/webhooks/whatsapp`.
 
 ## 5. Pasos de despliegue (Fase 4)
 

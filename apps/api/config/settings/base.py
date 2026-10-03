@@ -61,6 +61,7 @@ INSTALLED_APPS = [
     "tickets",
     "jobs",
     "integrations",
+    "messaging",
 ]
 
 MIDDLEWARE = [
@@ -168,6 +169,18 @@ if not ANTHROPIC_API_KEY and (_key_file := env("ANTHROPIC_API_KEY_FILE", "")):
     ANTHROPIC_API_KEY = Path(_key_file).read_text(encoding="utf-8").strip()
 ANTHROPIC_API_URL = env("ANTHROPIC_API_URL", "https://api.anthropic.com")
 JARVIS_LLM_PROXY_TARGET = env("JARVIS_LLM_PROXY_TARGET", "host.docker.internal:8000")
+
+# WhatsApp Cloud API (Phase 5, ADR-035). `fake` for development/tests; `whatsapp` in production.
+JARVIS_MESSAGING_PROVIDER = env("JARVIS_MESSAGING_PROVIDER", "fake")  # fake | whatsapp
+WHATSAPP_API_URL = env("WHATSAPP_API_URL", "https://graph.facebook.com/v23.0")
+WHATSAPP_PHONE_NUMBER_ID = env("WHATSAPP_PHONE_NUMBER_ID", "")
+WHATSAPP_BUSINESS_ACCOUNT_ID = env("WHATSAPP_BUSINESS_ACCOUNT_ID", "")
+WHATSAPP_ACCESS_TOKEN = env("WHATSAPP_ACCESS_TOKEN", "")  # system-user token, never printed
+WHATSAPP_ACCESS_TOKEN_FILE = env("WHATSAPP_ACCESS_TOKEN_FILE", "")
+WHATSAPP_APP_SECRET = env("WHATSAPP_APP_SECRET", "")  # signs webhooks; empty = reject all
+WHATSAPP_VERIFY_TOKEN = env("WHATSAPP_VERIFY_TOKEN", "")  # subscription handshake
+# Owner alerts over WhatsApp (E.164). Empty = alerts are only audited and logged.
+JARVIS_OWNER_WHATSAPP = env("JARVIS_OWNER_WHATSAPP", "")
 
 # Task queue (ADR-003): `inprocess` for development/tests, `postgres` in production.
 JARVIS_TASK_QUEUE = env("JARVIS_TASK_QUEUE")

@@ -6,8 +6,8 @@ class IntegrationsConfig(AppConfig):
     name = "integrations"
 
     def ready(self) -> None:
-        from integrations.github.events import handle_delivery
         from integrations.github.webhook import TASK_PREFIX
+        from integrations.inbound import handle_inbound_event
         from jobs.queue import register_handler
 
-        register_handler(TASK_PREFIX, lambda ident: handle_delivery(int(ident)))
+        register_handler(TASK_PREFIX, handle_inbound_event)

@@ -20,6 +20,7 @@ class GlobalPolicy(models.Model):
     alert_thresholds_pct = models.JSONField(default=list)
     low_priority_block_pct = models.PositiveSmallIntegerField()
     concurrent_ai_jobs = models.PositiveSmallIntegerField()
+    outbound_messages_per_hour = models.PositiveSmallIntegerField(default=30)
     worker_limits = models.JSONField(default=dict)
     approval_default_ttl_minutes = models.PositiveIntegerField()
     max_level_client_projects = models.PositiveSmallIntegerField()

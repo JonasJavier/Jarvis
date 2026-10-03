@@ -44,7 +44,7 @@ def test_unknown_prices_are_errors_not_free(pricing: PriceCatalog) -> None:
     with pytest.raises(PricingError):
         pricing.cost(Usage(provider="anthropic", service="llm", model="fake-small"))
     with pytest.raises(PricingError):
-        pricing.cost(Usage(provider="meta", service="whatsapp", units=1))
+        pricing.cost(Usage(provider="meta", service="sms", units=1))
 
 
 def test_invalid_catalog_is_rejected(tmp_path: Path) -> None:

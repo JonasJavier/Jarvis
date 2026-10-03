@@ -4,8 +4,6 @@ The signature is the only authentication; a request that fails it is rejected wi
 audited without storing its body. Deliveries are deduplicated by `X-GitHub-Delivery`.
 """
 
-import hashlib
-import hmac
 import json
 
 from django.conf import settings
@@ -16,6 +14,7 @@ from django.views.decorators.http import require_POST
 
 from audit.services import record
 from integrations.github.events import summarize
+from integrations.signing import verify_sha256
 from jobs.queue import default_queue
 from tickets.models import InboundEvent
 
@@ -26,10 +25,7 @@ MAX_BODY_BYTES = 1_000_000
 
 
 def verify_signature(secret: str, body: bytes, header: str | None) -> bool:
-    if not secret or not header or not header.startswith("sha256="):
-        return False
-    expected = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
-    return hmac.compare_digest(expected, header[len("sha256=") :])
+    return verify_sha256(secret, body, header)
 
 
 def _reject(reason: str, request: HttpRequest, status: int = 401) -> JsonResponse:

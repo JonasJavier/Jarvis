@@ -17,7 +17,14 @@ from django.conf import settings
 from audit.services import record
 from budgets.pricing import PriceCatalog, Usage, default_pricing
 from budgets.services import BudgetGuard, Priority
-from llm.providers import FakeLLMProvider, LLMProvider, LLMRequest, LLMResult, LLMUsage
+from llm.providers import (
+    AnthropicProvider,
+    FakeLLMProvider,
+    LLMProvider,
+    LLMRequest,
+    LLMResult,
+    LLMUsage,
+)
 from policies.actions import Actor
 
 if TYPE_CHECKING:
@@ -160,13 +167,19 @@ class LLMGateway:
 
 
 def default_gateway(provider: LLMProvider | None = None) -> LLMGateway:
-    """Gateway from settings. Only the fake provider exists in Phase 1B."""
+    """Gateway from settings: `fake` or `anthropic` (control plane only, ADR-035)."""
     if provider is None:
-        if settings.JARVIS_LLM_PROVIDER != "fake":
-            raise LLMGatewayError(
-                f"LLM provider {settings.JARVIS_LLM_PROVIDER!r} is not implemented yet (Phase 3)"
+        kind = settings.JARVIS_LLM_PROVIDER
+        if kind == "fake":
+            provider = FakeLLMProvider()
+        elif kind == "anthropic":
+            if not settings.ANTHROPIC_API_KEY:
+                raise LLMGatewayError("ANTHROPIC_API_KEY is not configured")
+            provider = AnthropicProvider(
+                api_key=settings.ANTHROPIC_API_KEY, api_url=settings.ANTHROPIC_API_URL
             )
-        provider = FakeLLMProvider()
+        else:
+            raise LLMGatewayError(f"unknown LLM provider {kind!r}")
     pricing = default_pricing()
     return LLMGateway(
         provider,

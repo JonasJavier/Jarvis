@@ -24,7 +24,7 @@ sesión. Los modelos y migraciones son incrementales: cada fase crea solo lo que
 | 2 | Integración GitHub App | ✅ Completada y probada en real — pendiente revisión del owner | 15–25 h |
 | 3 | Coding worker local (mock → Claude) | ✅ Completada y probada en real, incluida la 3b (proxy + Claude Code en el sandbox) — pendiente revisión del owner | 20–35 h |
 | 4 | Despliegue de Jarvis en producción (Railway) | ✅ Completada y verificada (`jarvis-ops`): API, worker y PostgreSQL en Railway con secretos; webhook de la GitHub App apuntando a producción y procesado por el worker; job de producción ejecutado por el runner del PC (PR #6) — pendiente revisión del owner | 8–14 h |
-| 5 | WhatsApp Cloud API | ⏳ Pendiente | 12–20 h |
+| 5 | WhatsApp Cloud API | ✅ Completada con el proveedor falso y probada de punta a punta en tests; pendiente conectar la app de Meta (bloqueo de verificación del owner) y revisión | 12–20 h |
 | 6 | Aprobaciones, despliegues de clientes y panel | ⏳ Pendiente | 15–25 h |
 | 7 | Gmail | ⏳ Pendiente | 10–18 h |
 | 8 | Mantenimiento mensual | ⏳ Pendiente | 15–25 h |
@@ -423,6 +423,28 @@ Meta (ver [cost-controls.md](cost-controls.md#whatsapp)).
 aviso de resolución al cliente (aprobado o autónomo según nivel); mensaje con intento de inyección no
 altera permisos; reentrega del webhook no duplica respuestas; ningún mensaje con precio o plazo sale
 sin aprobación.
+
+**Resultado (2026-10-03, ADR-035):** app `messaging` con `Conversation`/`Message`, webhook
+`/webhooks/whatsapp` (handshake, firma `X-Hub-Signature-256`, dedupe por `wamid`, resúmenes
+tipados, 200 inmediato y proceso por cola), `client_agent` sobre el `LLMGateway` (JSON estricto,
+textos de respaldo), `OutboundPolicy` (acción por tipo de mensaje, guard determinista de términos
+comerciales ⇒ `critical`, nivel de autonomía, aprobaciones atadas al texto, límite por hora con
+corte automático), `WhatsAppCloudProvider` + `FakeMessagingProvider`, avisos al owner por WhatsApp,
+aviso de resolución, `AnthropicProvider` para el control plane y los puentes `approvals` y
+`mark_deployed`. Los criterios de salida se cumplen en `tests/security/test_whatsapp_messaging.py`
+y en el flujo completo `tests/integration/test_whatsapp_flow.py` con el proveedor falso. **No
+probado en real:** la cuenta de desarrollador de Meta del owner quedó bloqueada en la verificación
+por SMS; al desbloquearse solo faltan los valores en Railway y el alta del webhook.
+
+**Pendientes detectados (para fases posteriores)**
+- Plantillas *utility* aprobadas para avisos fuera de la ventana de 24 h (hoy fallan con 131047 y
+  avisan al owner); su tarifa por país va al catálogo de precios.
+- Adjuntos (imagen, audio, documento): hoy solo se conserva el pie de foto; descargar y guardar
+  medios exige política de retención de datos personales (6/9).
+- Panel del owner (6) sustituye a `approvals` y `mark_deployed`; reactivar la auto-respuesta de una
+  conversación escalada también irá al panel (hoy solo por shell).
+- Verificación del negocio en Meta y número propio de producción (hoy número de prueba, 5
+  destinatarios).
 
 ---
 

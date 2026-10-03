@@ -68,6 +68,7 @@ def _expected_global(bundle: ManifestBundle) -> dict[str, Any]:
         "alert_thresholds_pct": list(manifest.budgets.alert_thresholds_pct),
         "low_priority_block_pct": manifest.budgets.low_priority_block_pct,
         "concurrent_ai_jobs": manifest.limits.concurrent_ai_jobs,
+        "outbound_messages_per_hour": manifest.limits.outbound_messages_per_hour,
         "worker_limits": manifest.worker_limits.model_dump(mode="json"),
         "approval_default_ttl_minutes": manifest.approvals.default_ttl_minutes,
         "max_level_client_projects": manifest.autonomy.max_level_client_projects,

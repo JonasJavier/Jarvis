@@ -46,3 +46,9 @@ units:                            # USD por unidad (mensaje, llamada)
   fake:
     whatsapp:
       per_unit: 0.05
+  meta:
+    # Mensajes de servicio (texto libre dentro de la ventana de 24 h abierta por el cliente):
+    # sin cargo en el rate card de Meta vigente (referencia 2026-10-03). Las plantillas
+    # (utility/marketing) tienen precio por mensaje y país; se añadirán al introducir plantillas.
+    whatsapp:
+      per_unit: 0.00

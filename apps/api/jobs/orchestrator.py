@@ -276,6 +276,11 @@ def run_job(
             body=_pr_body(report),
         )
         finish_run(run, JobRunStatus.SUCCEEDED)
+        _alert_owner(
+            job,
+            "pr_ready",
+            f"Draft PR listo para revisar (ticket #{job.ticket_id}): {published.pull_request.url}",
+        )
         return RunOutcome(run, result, pr_url=published.pull_request.url)
     except BudgetError as exc:
         finish_run(run, JobRunStatus.FAILED, error=f"budget: {exc}"[:500])
@@ -285,6 +290,23 @@ def run_job(
         return RunOutcome(run, result)
     finally:
         _destroy(workspace, executor, job)
+
+
+def _alert_owner(job: Job, kind: str, text: str) -> None:
+    """Owner notifications never fail a job run."""
+    try:
+        from messaging.notifications import notify_owner
+
+        notify_owner(
+            kind,
+            text,
+            reference=f"job:{job.pk}:{kind}",
+            ticket=job.ticket,
+            project=job.project,
+            correlation_id=job.correlation_id,
+        )
+    except Exception:  # pragma: no cover - defensive
+        log.exception("owner notification failed for job %s", job.pk)
 
 
 def _record_report(run: JobRun, agent_kind: str, report: Any) -> None:

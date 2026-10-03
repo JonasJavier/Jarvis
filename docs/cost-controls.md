@@ -122,9 +122,16 @@ Agent SDK / `claude -p` han cambiado durante 2026 y deben **verificarse al inici
 
 ## WhatsApp
 
-No se asume que los mensajes de servicio sean gratuitos: Meta anunció cambios de tarifas a partir de
-octubre de 2026. Las tarifas se guardan en el catálogo de precios y se consulta el rate card oficial al
-iniciar la Fase 5. Cada mensaje saliente se reserva en `BudgetGuard` y se registra en `UsageLedger`.
+Cada mensaje saliente se reserva en `BudgetGuard` con la tarifa `meta/whatsapp` del catálogo y se
+registra en `UsageLedger` al confirmarse el envío (Fase 5, ADR-035). Hoy el catálogo recoge los
+mensajes de **servicio** (texto libre dentro de la ventana de 24 h abierta por el cliente), sin cargo
+en el rate card vigente de Meta a 2026-10-03; las **plantillas** (utility/marketing/authentication)
+tienen precio por mensaje y país y se añadirán al catálogo cuando se introduzcan. No se asume nada
+fuera del catálogo: un precio desconocido es un error, nunca gratis.
+
+Freno adicional: `limits.outbound_messages_per_hour` (`global.yaml`) corta la auto-respuesta de una
+conversación que supere el límite por proyecto y hora, y el owner recibe el aviso. Las llamadas del
+`client_agent` (una por mensaje, rol `cheap`) pasan por el `LLMGateway` como cualquier otra.
 
 ## Presupuesto operativo inicial (orientativo)
 

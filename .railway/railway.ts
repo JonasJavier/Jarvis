@@ -35,6 +35,9 @@ export default defineRailway(() => {
     // Railway containers are not privileged: the Docker sandbox never runs here (ADR-015).
     JARVIS_WORKER_EXECUTOR: "inprocess",
     JARVIS_CODER_AGENT: "auto",
+    // WhatsApp Cloud API (Phase 5). Secrets are set by the owner and preserved below.
+    JARVIS_MESSAGING_PROVIDER: "whatsapp",
+    WHATSAPP_API_URL: "https://graph.facebook.com/v23.0",
   };
 
   // Secrets are set once by the owner (`railway variables --set ... --service api`) and only
@@ -53,16 +56,29 @@ export default defineRailway(() => {
       GITHUB_WEBHOOK_SECRET: preserve(),
       GITHUB_APP_PRIVATE_KEY: preserve(),
       ANTHROPIC_API_KEY: preserve(),
+      WHATSAPP_PHONE_NUMBER_ID: preserve(),
+      WHATSAPP_BUSINESS_ACCOUNT_ID: preserve(),
+      WHATSAPP_ACCESS_TOKEN: preserve(),
+      WHATSAPP_APP_SECRET: preserve(),
+      WHATSAPP_VERIFY_TOKEN: preserve(),
+      JARVIS_OWNER_WHATSAPP: preserve(),
     },
   });
 
-  // Processes webhooks and other control-plane tasks from the durable queue. It never consumes
-  // `job` tasks: those need a Docker-capable runner outside Railway (ADR-015). It holds no
-  // integration secret: its tasks only touch the database.
+  // Processes webhooks, client replies and other control-plane tasks from the durable queue. It
+  // never consumes `job` tasks: those need a Docker-capable runner outside Railway (ADR-015).
+  // Replying to clients needs the WhatsApp token and the model key; nothing else.
   const worker = service("worker", {
     source: github(REPO, { branch: "main" }),
-    start: "python manage.py run_worker --kinds inbound_event",
-    env: { ...common, DJANGO_SECRET_KEY: preserve() },
+    start: "python manage.py run_worker --kinds inbound_event,outbound_message",
+    env: {
+      ...common,
+      DJANGO_SECRET_KEY: preserve(),
+      ANTHROPIC_API_KEY: preserve(),
+      WHATSAPP_PHONE_NUMBER_ID: preserve(),
+      WHATSAPP_ACCESS_TOKEN: preserve(),
+      JARVIS_OWNER_WHATSAPP: preserve(),
+    },
   });
 
   return project("jarvis-ops", { resources: [db, api, worker] });

@@ -441,3 +441,56 @@ nuevos (corte 2026-12-01); la configuración se declara con Infrastructure as Co
 **Consecuencias:** el flujo completo de soporte funciona con el PC apagado salvo la ejecución del
 agente de código, que depende del runner; es el compromiso explícito hasta decidir el VPS. La
 configuración de Railway queda versionada y revisable como el resto de la política.
+
+## ADR-035 — WhatsApp Cloud API: conversaciones, agente de cliente y política de salida (Fase 5)
+**Estado:** Aceptada (2026-10-03)
+
+**Contexto:** la Fase 5 conecta el canal de soporte. Todo lo que llega es entrada no confiable, el
+LLM solo redacta y la autorización la decide código (reglas 3, 4 y 12). Meta exige validar firma,
+responder 200 rápido y respetar la ventana de 24 horas de servicio.
+
+**Decisión:**
+1. **Modelo:** una `Conversation` por `(canal, número E.164)`; se liga a cliente/proyecto en la
+   primera identificación exacta y no cambia. Cada `Message` guarda dirección, tipo, estado, la
+   acción de política con la que salió, su clave de idempotencia y el coste. Un mensaje nuevo se
+   adjunta al ticket abierto de la conversación; si no hay ninguno, abre uno.
+2. **Orden determinista antes de cualquier modelo:** firma → dedupe por `wamid` → identificación
+   exacta → palabras de escalamiento → interruptor de auto-respuesta → solo entonces el
+   `client_agent`. Un remitente no identificado **no recibe respuesta**: no hay proyecto sobre el
+   que evaluar la política; se abre el ticket en `needs_identification` y se alerta al owner.
+3. **`client_agent`:** una llamada por mensaje (rol `cheap`) que devuelve JSON estricto
+   `{intent, reply}`; salida truncada y parseada sin adivinar. Si falla el modelo, el presupuesto o
+   el parseo, salen textos fijos en `messaging/texts.py` y se alerta al owner. El intent mueve el
+   ticket: `bug` → `code_task` → `contract_check` (mantenimiento incluido ⇒ job; si no ⇒
+   `waiting_owner`), `question` → `support_only`, `feature` → `needs_quote`, `unclear` →
+   `waiting_client`.
+4. **`OutboundPolicy`:** el tipo de mensaje fija la acción (`send_acknowledgement`,
+   `send_info_request`, `send_status_update` = low; `send_resolution_notice` = medium). Un guard
+   determinista (`messaging/guard.py`) reclasifica como `commit_commercial_terms` (critical, siempre
+   aprobación) cualquier texto con precios, plazos, descuentos, garantías o contratos, aunque el
+   agente tenga prohibido escribirlos. La aprobación se ata al hash del texto exacto
+   (`subject_ref`); cambiar el texto la invalida.
+5. **Límite y corte:** `limits.outbound_messages_per_hour` en `global.yaml` (por proyecto y hora).
+   Superarlo rechaza el mensaje, desactiva la auto-respuesta de la conversación y alerta al owner.
+   Solo el owner la reactiva.
+6. **Entrega:** `deliver` es una tarea de cola (`outbound_message`) con reserva/reconciliación en
+   `BudgetGuard` (tarifa `meta/whatsapp` del catálogo) y un solo envío por clave; los errores
+   reintentables vuelven a la cola con backoff, los demás quedan `failed` con aviso. Solo texto libre
+   dentro de la ventana de 24 h: el aviso de resolución fuera de ventana falla con el código 131047
+   hasta que exista una plantilla *utility* aprobada (pendiente).
+7. **Avisos al owner:** `notify_owner` siempre audita y registra; si `JARVIS_OWNER_WHATSAPP` está
+   definido envía por el mismo proveedor a una conversación marcada `is_owner`, sin política de
+   proyecto, idempotente por referencia y con el mismo tope horario para evitar tormentas.
+8. **Puentes hasta la Fase 6:** `manage.py approvals list|approve|reject --email` decide
+   aprobaciones como owner (email en la allowlist) y libera el mensaje aparcado;
+   `manage.py mark_deployed <ticket> --email` declara el despliegue manual y dispara el aviso de
+   resolución. El panel sustituirá a ambos.
+9. **Proveedor de modelo del control plane:** `AnthropicProvider` detrás del `LLMGateway`
+   (filtro de secretos + presupuesto). El sandbox sigue usando solo el proxy (ADR-033).
+10. **Cola:** un único handler `inbound_event` enruta por `source` (GitHub, WhatsApp); el worker de
+    Railway consume `inbound_event,outbound_message`. El runner de código no toca mensajería.
+
+**Consecuencias:** ningún mensaje llega a un cliente sin decisión del `PolicyEngine`; los precios y
+plazos siempre pasan por el owner; una conversación escalada queda en manos humanas; el coste por
+mensaje queda en `UsageLedger`. Pendiente: plantillas para mensajes fuera de ventana, adjuntos
+(hoy solo se guarda el pie de foto) y verificación del negocio en Meta para subir límites.

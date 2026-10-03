@@ -43,7 +43,7 @@ def ingest(
     idempotency: IdempotencyService | None = None,
 ) -> IntakeResult:
     idempotency = idempotency or IdempotencyService()
-    event, created = _persist_event(
+    event, created = persist_event(
         source=source,
         external_id=external_id,
         sender_kind=sender_kind,
@@ -64,17 +64,25 @@ def ingest(
             payload={"source": source},
         )
 
-    ticket_id, replayed = idempotency.run(
-        f"ticket:{source}:{external_id}",
-        "ticket.create",
-        {"source": source, "external_id": external_id},
-        lambda: str(_open_ticket(event, summary).pk),
-    )
-    ticket = Ticket.objects.get(pk=int(ticket_id))
+    ticket, replayed = open_ticket_for_event(event, summary=summary, idempotency=idempotency)
     return IntakeResult(event=event, ticket=ticket, duplicate=not created or replayed)
 
 
-def _persist_event(
+def open_ticket_for_event(
+    event: InboundEvent, *, summary: str, idempotency: IdempotencyService | None = None
+) -> tuple[Ticket, bool]:
+    """The ticket of an already persisted event, created once. Returns (ticket, replayed)."""
+    idempotency = idempotency or IdempotencyService()
+    ticket_id, replayed = idempotency.run(
+        f"ticket:{event.source}:{event.external_id}",
+        "ticket.create",
+        {"source": event.source, "external_id": event.external_id},
+        lambda: str(_open_ticket(event, summary).pk),
+    )
+    return Ticket.objects.get(pk=int(ticket_id)), replayed
+
+
+def persist_event(
     *,
     source: str,
     external_id: str,

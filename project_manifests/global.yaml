@@ -12,6 +12,7 @@ budgets:                            # servicios de pago por uso (IA, WhatsApp, A
 
 limits:
   concurrent_ai_jobs: 2
+  outbound_messages_per_hour: 30    # mensajes a clientes por proyecto y hora; al superarlo, corte automático
 
 worker_limits:                      # por seguridad y estabilidad (architecture.md §11)
   default:
