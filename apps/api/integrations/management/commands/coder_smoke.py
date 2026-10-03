@@ -11,7 +11,7 @@ from integrations.github.factory import default_broker
 from jobs.factory import default_executor
 from jobs.models import JobStatus
 from jobs.orchestrator import run_job
-from jobs.queue import InProcessQueue
+from jobs.queue import InProcessQueue, default_queue
 from jobs.services import check_budget_and_queue, create_job
 from jobs.states import transition
 from policies.engine import default_engine
@@ -29,6 +29,12 @@ class Command(BaseCommand):
         parser.add_argument("--summary", default="Bug reported by the client", help="Ticket text.")
         parser.add_argument(
             "--agent", choices=["mock", "claude_code"], default="mock", help="Agent kind."
+        )
+        parser.add_argument(
+            "--enqueue-only",
+            action="store_true",
+            help="Create the ticket and job and leave the job in the configured queue "
+            "(a `run_worker --kinds job` runner executes it).",
         )
         parser.add_argument(
             "--replace",
@@ -49,6 +55,13 @@ class Command(BaseCommand):
         )
         job = create_job(ticket, "fix", engine=engine).job
         guard = BudgetGuard()
+        if options["enqueue_only"]:
+            if job.status == "pending":
+                check_budget_and_queue(job, guard=guard, queue=default_queue())
+            self.stdout.write(
+                self.style.SUCCESS(f"job {job.pk} is {job.status}; left for a runner")
+            )
+            return
         if job.status == "pending":
             check_budget_and_queue(job, guard=guard, queue=InProcessQueue())
         elif job.status in ("failed", "timed_out") and job.can_retry:

@@ -23,7 +23,7 @@ sesión. Los modelos y migraciones son incrementales: cada fase crea solo lo que
 | 1B | Núcleo de seguridad: política, aprobaciones, presupuesto, idempotencia | ✅ Completada — pendiente revisión del owner | 10–14 h |
 | 2 | Integración GitHub App | ✅ Completada y probada en real — pendiente revisión del owner | 15–25 h |
 | 3 | Coding worker local (mock → Claude) | ✅ Completada y probada en real, incluida la 3b (proxy + Claude Code en el sandbox) — pendiente revisión del owner | 20–35 h |
-| 4 | Despliegue de Jarvis en producción (Railway) | ⏳ Pendiente — guía recibida ([railway.md](railway.md)) | 8–14 h |
+| 4 | Despliegue de Jarvis en producción (Railway) | ✅ Desplegado (`jarvis-ops`): API, worker y PostgreSQL en Railway; runner de código fuera de Railway — pendiente secretos del owner y revisión | 8–14 h |
 | 5 | WhatsApp Cloud API | ⏳ Pendiente | 12–20 h |
 | 6 | Aprobaciones, despliegues de clientes y panel | ⏳ Pendiente | 15–25 h |
 | 7 | Gmail | ⏳ Pendiente | 10–18 h |
@@ -353,6 +353,33 @@ fase, en su orden; no se despliega nada antes.
 
 **Criterio de salida:** flujo de la Fase 3 funcionando en producción con el PC apagado; credenciales
 separadas por identidad (`control_plane`, `coding_worker`, `deployer`).
+
+**Resultado (2026-10-03, ADR-034):** proyecto `jarvis-ops` creado y desplegado desde `main` con
+Infrastructure as Code (`.railway/railway.ts`): Railway PostgreSQL, servicio `api` (gunicorn +
+WhiteNoise, pre-deploy `prepare_release` = migraciones + manifests, healthcheck `/healthz`, dominio
+`https://api-production-6221.up.railway.app`) y servicio `worker` (`run_worker --kinds
+inbound_event` sobre la cola duradera `PostgresQueue`). Verificado en producción: `/healthz` 200,
+webhook sin firma ⇒ 401, migraciones aplicadas, `check_manifests` sin drift, worker consumiendo.
+Decisiones cerradas: ADR-003 (cola en PostgreSQL), ADR-006 (Railway PostgreSQL), ADR-015 (runner
+con Docker fuera de Railway, porque sus contenedores no son privilegiados). `DJANGO_SECRET_KEY` y
+`JARVIS_OWNER_EMAILS` definidos; los secretos de integraciones (`GITHUB_APP_PRIVATE_KEY`,
+`GITHUB_WEBHOOK_SECRET`, `ANTHROPIC_API_KEY`) los define el owner con `railway variables --set`.
+
+**Criterio "PC apagado": cumplido parcialmente, de forma explícita.** Intake, webhooks, tickets,
+cola y aprobaciones viven en Railway 24/7. La ejecución del agente de código necesita un runner con
+Docker (`run_worker --kinds job`), hoy el PC del owner; sin él, los jobs esperan en la cola. Un VPS
+pequeño con Docker ejecutando la misma imagen cerraría el hueco (decisión pendiente, con coste).
+
+**Pendientes detectados (para fases posteriores)**
+- Runner remoto con Docker (VPS) para que los jobs de código no dependan del PC; mismo comando.
+- Cron de Railway (mínimo 5 min, UTC) para `expire_stale`/`expire_pending` y el mantenimiento (8).
+- Observabilidad: logs centralizados y destino externo de auditoría (9). Backups/PITR de la base
+  de datos de Railway: revisar plan y política (9).
+- CI → Railway: hoy Railway despliega cada push a `main` por su cuenta; valorar `railwayapp/config`
+  para planear/aplicar el IaC desde GitHub Actions con un token de proyecto (9).
+- `JARVIS_IDENTITY_VERIFIER=FakeVerifier` en producción: ningún cliente de API puede autenticarse
+  hasta el verificador real (6). El admin de Django exige un superusuario (crear por `railway ssh`).
+- La CLI de Railway en Windows necesita el binario nativo en el `PATH` para IaC (ver railway.md).
 
 ---
 

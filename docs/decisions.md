@@ -28,7 +28,7 @@ presupuestos, uso y auditoría (las políticas críticas se materializan desde m
 **Consecuencias:** los trabajos largos nunca viven en un request web.
 
 ## ADR-003 — Cola de tareas como abstracción
-**Estado:** Aceptada (abstracción) · **Pendiente** (implementación de producción, Fase 4)
+**Estado:** Aceptada (abstracción) · implementación de producción decidida en ADR-034 (`PostgresQueue`, 2026-10-03)
 
 **Decisión:** interfaz `TaskQueue`; `InProcessQueue` para desarrollo y tests. **No** se elige
 todavía Redis, Celery, cola en PostgreSQL ni otra tecnología de producción. La anterior elección de
@@ -67,7 +67,7 @@ edición del worktree; sin Bash libre; `run_tests`/`run_linter` como herramienta
 internet. Se implementa como Fase 3b.
 
 ## ADR-006 — PostgreSQL de producción
-**Estado:** Pendiente (Fase 4)
+**Estado:** Aceptada (2026-10-03): Railway PostgreSQL, ver ADR-034
 
 **Opciones:** Railway PostgreSQL u otra alternativa si hay una razón técnica clara (backups,
 point-in-time recovery, red privada, latencia).
@@ -147,7 +147,7 @@ mantenimiento y cualquier operación externa repetible (claves en architecture.m
 en estado incierto se reconcilia con el proveedor antes de reintentar.
 
 ## ADR-015 — Aislamiento y límites del coding worker
-**Estado:** Aceptada (requisitos y abstracción) · **Pendiente** (backend de producción, Fase 4)
+**Estado:** Aceptada (requisitos y abstracción) · backend de producción decidido en ADR-034 (runner con Docker fuera de Railway, 2026-10-03)
 
 **Decisión:** ejecutar código de un repo es ejecución no confiable. Límites obligatorios de CPU, RAM,
 PIDs, tiempo, workspace, tamaño de archivo, egress, intentos y turnos (valores en architecture.md §11).
@@ -407,3 +407,37 @@ owner; el único valor que un script malicioso podría leer en el sandbox es un 
 para gastar el presupuesto de ese run a través del proxy, y ese gasto está acotado por run, día y
 mes. Coste: un contenedor y una red extra por ejecución, y el proxy añade una pasada de parseo de
 SSE. La prueba real con Claude requiere `ANTHROPIC_API_KEY` en el `.env` del control plane.
+
+## ADR-034 — Topología de producción en Railway (Fase 4)
+**Estado:** Aceptada (2026-10-03) · cierra las partes pendientes de ADR-001, ADR-003, ADR-006 y ADR-015
+
+**Contexto:** Railway ejecuta contenedores **no privilegiados**: no hay Docker dentro de Docker, así
+que el sandbox de la Fase 3 no puede correr allí. Además `railway.toml` está obsoleto para servicios
+nuevos (corte 2026-12-01); la configuración se declara con Infrastructure as Code.
+**Decisión:**
+1. **Proyecto** `jarvis-ops` (ID `4719fd5e-f83a-42ff-bf0e-08cbfff4dd17`), ambiente `production`,
+   definido en `.railway/railway.ts` (IaC, SDK `railway` en `package.json`; se aplica con
+   `railway config apply` desde este repo, nunca por dashboard). Tres recursos:
+   - `postgres`: Railway PostgreSQL, referenciado como `${{Postgres.DATABASE_URL}}` (**ADR-006
+     decidida**: Railway PostgreSQL; backups y recuperación se revisan en la Fase 9).
+   - `api`: imagen del `Dockerfile` del repo (gunicorn + WhiteNoise), pre-deploy
+     `migrate && load_manifests`, healthcheck `/healthz`, dominio generado por Railway.
+   - `worker`: la misma imagen con `run_worker --kinds inbound_event`: consume la cola duradera para
+     webhooks y tareas del control plane. No tiene secretos de integraciones.
+2. **Cola de producción (ADR-003 decidida):** `PostgresQueue` sobre la propia base de datos
+   (`SELECT … FOR UPDATE SKIP LOCKED`, reintentos con backoff, dead-letter tras `max_attempts`,
+   recuperación de locks obsoletos). Sin Redis ni broker adicional: a esta escala, una pieza menos
+   que operar y la misma transacción que el resto del dominio. Los ids de tarea llevan su clase
+   (`inbound_event:…`, `job:…`) y cada worker consume solo las clases que puede ejecutar.
+3. **Ejecución de workers (ADR-015, backend de producción):** los jobs de código (`job:*`) solo los
+   consume un **runner con Docker** fuera de Railway, ejecutando `run_worker --kinds job` con el
+   `LocalDockerExecutor` y el proxy del `LLMGateway` locales, conectado a la base de datos de
+   producción. Hoy ese runner es el PC del owner; la opción de un VPS pequeño con Docker (misma
+   imagen, mismo comando) se decide cuando el volumen lo justifique. Mientras el runner esté
+   apagado, los jobs esperan en la cola; intake, webhooks, tickets y aprobaciones siguen 24/7.
+4. **Secretos:** solo los define el owner con `railway variables --set` y el IaC los conserva con
+   `preserve()`; `DJANGO_SECRET_KEY` se genera aleatoriamente por servicio. `HSTS` 30 días sin
+   `preload` (irreversible para el dominio). `ALLOWED_HOSTS` incluye `healthcheck.railway.app`.
+**Consecuencias:** el flujo completo de soporte funciona con el PC apagado salvo la ejecución del
+agente de código, que depende del runner; es el compromiso explícito hasta decidir el VPS. La
+configuración de Railway queda versionada y revisable como el resto de la política.

@@ -177,3 +177,14 @@ def test_global_policy_is_materialized_and_drift_detected(manifests_dir: Path) -
     GlobalPolicy.objects.filter(pk=global_policy.pk).update(forbidden=[])
     drift = detect_drift(load_bundle(manifests_dir))
     assert drift == ["global: field 'forbidden' differs from manifest"]
+
+
+def test_prepare_release_migrates_and_loads(manifests_dir: Path, settings: Any) -> None:
+    from io import StringIO
+
+    settings.JARVIS_MANIFESTS_DIR = manifests_dir
+    out = StringIO()
+    call_command("prepare_release", stdout=out)
+    text = out.getvalue()
+    assert "prepare_release: done" in text and "Manifests loaded." in text
+    assert detect_drift(load_bundle(manifests_dir)) == []

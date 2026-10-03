@@ -15,7 +15,7 @@ cuenta son de solo lectura o están prohibidos.
 | OMSTA-Demo | `42a16c09-fa89-4151-adf5-70377c135233` | **Prohibido** |
 | Wikiverse | `aa4d2c19-6685-40e6-806a-e8ac9f4bd547` | Solo si la tarea es explícitamente sobre él |
 | Photograpy-Portfolio | `780e10e9-0cb0-4a89-95d8-2ceff0b29602` | Solo si la tarea es explícitamente sobre él |
-| Jarvis | *se anota aquí al crearlo* | Proyecto de este repo |
+| Jarvis (`jarvis-ops`) | `4719fd5e-f83a-42ff-bf0e-08cbfff4dd17` (ambiente `production`: `61186188-7fa2-41be-8fb4-3c6a548bdbf5`) | Proyecto de este repo |
 
 Los IDs no son credenciales; sirven para no equivocarse de destino. Todo comando que cambie algo
 lleva `--project` explícito con el ID de Jarvis.
@@ -36,7 +36,30 @@ de clientes en Railway es otra cosa y tiene sus propias reglas (sección 7).
   máquina del agente. Nunca en el chat, en archivos del repo ni en commits.
 - Con token de proyecto, `railway whoami` y `railway list` no funcionan; se comprueba con `railway status`.
 
-## 2. Topología propuesta (confirmar en Fase 4)
+## 2. Topología (decidida en la Fase 4, ADR-034)
+
+| Pieza | Decisión | Estado |
+|---|---|---|
+| Proyecto | `jarvis-ops` (`4719fd5e-f83a-42ff-bf0e-08cbfff4dd17`), ambiente `production` (`61186188-7fa2-41be-8fb4-3c6a548bdbf5`) | Creado 2026-10-03 |
+| Configuración | **Infrastructure as Code** en `.railway/railway.ts` (`railway.toml` está obsoleto para servicios nuevos). `npm install` + `railway config plan` / `apply` desde este repo | En uso |
+| Servicio `api` | `36822d9c-6861-459c-8f34-ce6026000b84`, GitHub `main`, `Dockerfile` del repo, gunicorn + WhiteNoise, healthcheck `/healthz`, dominio `https://api-production-6221.up.railway.app` | Desplegado |
+| Servicio `worker` | `65a90588-9c97-4247-87ac-6c87a8ceb72f`, misma imagen, `run_worker --kinds inbound_event` | Desplegado |
+| Base de datos | `postgres` (`dcfdbf63-ba2f-47c2-9590-94c3fa07034e`), referencia `${{Postgres.DATABASE_URL}}` | Creada (ADR-006) |
+| Cola de producción | `PostgresQueue` en la misma base de datos (ADR-003) | En uso |
+| Ejecución de workers de código | Fuera de Railway (contenedores no privilegiados): runner con Docker (`run_worker --kinds job`), hoy el PC del owner (ADR-015/034) | Decidido |
+| Ambiente `staging` de Jarvis | No por ahora: un solo ambiente hasta tener clientes | Decidido |
+| Cron / scheduler | Pendiente (Fase 8): Railway admite cron por servicio (mínimo 5 min, UTC) | Pendiente |
+| Observabilidad y auditoría externa | Logs de Railway por ahora; destino externo en la Fase 9 | Pendiente |
+| Volúmenes | No necesarios | — |
+
+**Trampa de la CLI (Windows):** el SDK de IaC comprueba la versión de la CLI ejecutando `railway
+--version`; con el envoltorio de npm falla. Anteponer al `PATH` la carpeta del binario nativo
+(`%APPDATA%
+pm
+ode_modules\@railway\cliin`) antes de `railway config plan|apply`. Requiere
+CLI ≥ 5.42.1 (instalada 5.63.1).
+
+## 2 (histórico). Topología propuesta antes de la Fase 4
 
 | Pieza | Propuesta | Estado |
 |---|---|---|
@@ -50,7 +73,7 @@ de clientes en Railway es otra cosa y tiene sus propias reglas (sección 7).
 | Observabilidad y destino de auditoría | — | Pendiente (Fase 4/9) |
 | Volúmenes | No necesarios: Jarvis no guarda archivos en disco | — |
 
-## 3. Cambios de código necesarios antes del primer deploy (Fase 4)
+## 3. Cambios de código necesarios antes del primer deploy (Fase 4) — hechos el 2026-10-03
 
 Estado actual tras la Fase 1A: `/healthz` responde 200 sin sesión, no hay secretos en el repo y la
 configuración sale de variables de entorno. Falta:

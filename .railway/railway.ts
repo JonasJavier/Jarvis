@@ -18,7 +18,8 @@ export default defineRailway(() => {
   const common = {
     DJANGO_SETTINGS_MODULE: "config.settings.prod",
     DATABASE_URL: db.env.DATABASE_URL,
-    DJANGO_ALLOWED_HOSTS: "${{RAILWAY_PUBLIC_DOMAIN}}",
+    // Railway probes the healthcheck with its own Host header.
+    DJANGO_ALLOWED_HOSTS: "${{RAILWAY_PUBLIC_DOMAIN}},healthcheck.railway.app",
     CSRF_TRUSTED_ORIGINS: "https://${{RAILWAY_PUBLIC_DOMAIN}}",
     DJANGO_BEHIND_TLS_PROXY: "true",
     JARVIS_SOURCE_COMMIT: "${{RAILWAY_GIT_COMMIT_SHA}}",
@@ -42,7 +43,7 @@ export default defineRailway(() => {
     source: github(REPO, { branch: "main" }),
     // Migrations and manifests go in the pre-deploy step so every deploy leaves the database
     // aligned with the versioned policy before traffic arrives.
-    preDeploy: "python manage.py migrate --noinput && python manage.py load_manifests",
+    preDeploy: "python manage.py prepare_release",
     healthcheck: "/healthz",
     healthcheckTimeout: 120,
     env: {
