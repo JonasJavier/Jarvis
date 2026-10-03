@@ -28,6 +28,9 @@ class Command(BaseCommand):
         parser.add_argument("--ref", required=True, help="Stable id of this run.")
         parser.add_argument("--summary", default="Bug reported by the client", help="Ticket text.")
         parser.add_argument(
+            "--agent", choices=["mock", "claude_code"], default="mock", help="Agent kind."
+        )
+        parser.add_argument(
             "--replace",
             nargs=3,
             action="append",
@@ -53,7 +56,7 @@ class Command(BaseCommand):
         if job.status != "queued":
             raise CommandError(f"job {job.pk} is {job.status}; nothing to run")
         agent = AgentConfig(
-            kind="mock",
+            kind=options["agent"],
             params={
                 "replace": [
                     {"path": path, "old": old, "new": new} for path, old, new in options["replace"]

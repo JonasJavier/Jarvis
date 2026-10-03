@@ -66,7 +66,13 @@ class RunResult:
 
 class WorkerExecutor(Protocol):
     def launch(
-        self, spec: JobSpec, *, workspace: Path, limits: WorkerLimits, idempotency_key: str
+        self,
+        spec: JobSpec,
+        *,
+        workspace: Path,
+        limits: WorkerLimits,
+        idempotency_key: str,
+        environment: dict[str, str] | None = None,
     ) -> RunResult: ...
 
     def cancel(self, handle: RunHandle) -> None: ...
@@ -129,31 +135,120 @@ def _collect(result: RunResult, workspace: Path, limits: WorkerLimits) -> RunRes
 
 
 class LocalDockerExecutor:
-    def __init__(self, image: str, *, docker: str | None = None) -> None:
+    def __init__(
+        self, image: str, *, docker: str | None = None, llm_target: str | None = None
+    ) -> None:
         self._image = image
         self._docker = docker or shutil.which("docker") or "docker"
+        # host:port of the control plane's LLM proxy as seen from Docker; None = no model access.
+        self._llm_target = llm_target
 
     @property
     def image(self) -> str:
         return self._image
 
     def launch(
-        self, spec: JobSpec, *, workspace: Path, limits: WorkerLimits, idempotency_key: str
+        self,
+        spec: JobSpec,
+        *,
+        workspace: Path,
+        limits: WorkerLimits,
+        idempotency_key: str,
+        environment: dict[str, str] | None = None,
     ) -> RunResult:
         handle = RunHandle(idempotency_key, f"jarvis-{uuid.uuid4().hex[:12]}")
         result = RunResult(handle=handle)
-        for phase, network in PHASES:
-            outcome = self.run_container(
+        prepare = self.run_container(
+            workspace,
+            limits,
+            name=f"{handle.container_prefix}-prepare",
+            network="bridge",
+            args=["--phase", "prepare"],
+        )
+        result.phases.append(PhaseResult("prepare", *prepare))
+        if prepare[0] == 0 and not prepare[2]:
+            work = self.run_work_container(
                 workspace,
                 limits,
-                name=f"{handle.container_prefix}-{phase}",
-                network=network,
-                args=["--phase", phase],
+                prefix=handle.container_prefix,
+                args=["--phase", "work"],
+                environment=environment,
             )
-            result.phases.append(PhaseResult(phase, *outcome))
-            if outcome[0] != 0 or outcome[2]:
-                break
+            result.phases.append(PhaseResult("work", *work))
         return _collect(result, workspace, limits)
+
+    def run_work_container(
+        self,
+        workspace: Path,
+        limits: WorkerLimits,
+        *,
+        prefix: str,
+        args: list[str],
+        entrypoint: str | None = None,
+        environment: dict[str, str] | None = None,
+    ) -> tuple[int, str, bool, float]:
+        """The `work` phase: no egress at all, or an internal network whose only other member
+        is a forwarder to the LLM proxy (ADR-033). The forwarder never carries anything else."""
+        if self._llm_target is None:
+            return self.run_container(
+                workspace,
+                limits,
+                name=f"{prefix}-work",
+                network="none",
+                args=args,
+                entrypoint=entrypoint,
+                environment=environment,
+            )
+        network = f"{prefix}-net"
+        forwarder = f"{prefix}-llm"
+        self._docker_run(["network", "create", "--internal", network], check=True)
+        try:
+            self._docker_run(
+                [
+                    "run",
+                    "-d",
+                    "--rm",
+                    f"--name={forwarder}",
+                    f"--network={network}",
+                    "--add-host=host.docker.internal:host-gateway",
+                    "--cap-drop=ALL",
+                    "--security-opt=no-new-privileges",
+                    "--read-only",
+                    "--memory=128m",
+                    "--pids-limit=32",
+                    "--entrypoint=python",
+                    self._image,
+                    "-m",
+                    "workers.coder.forward",
+                    "--listen",
+                    "0.0.0.0:8080",
+                    "--target",
+                    self._llm_target,
+                ],
+                check=True,
+            )
+            self._docker_run(["network", "connect", "bridge", forwarder], check=True)
+            env = dict(environment or {})
+            env["ANTHROPIC_BASE_URL"] = f"http://{forwarder}:8080/llm"
+            return self.run_container(
+                workspace,
+                limits,
+                name=f"{prefix}-work",
+                network=network,
+                args=args,
+                entrypoint=entrypoint,
+                environment=env,
+            )
+        finally:
+            self._docker_run(["rm", "-f", forwarder])
+            self._docker_run(["network", "rm", network])
+
+    def _docker_run(self, args: list[str], *, check: bool = False) -> None:
+        completed = subprocess.run(  # noqa: S603 - fixed docker invocation
+            [self._docker, *args], capture_output=True, text=True, timeout=120, check=False
+        )
+        if check and completed.returncode != 0:
+            raise ExecutorError(f"docker {args[0]} {args[1] if len(args) > 1 else ''} failed")
 
     def run_container(
         self,
@@ -164,6 +259,7 @@ class LocalDockerExecutor:
         network: str,
         args: list[str],
         entrypoint: str | None = None,
+        environment: dict[str, str] | None = None,
     ) -> tuple[int, str, bool, float]:
         """Run one container under the hard limits -> (exit_code, output, timed_out, seconds)."""
         command = [
@@ -185,6 +281,8 @@ class LocalDockerExecutor:
             f"{workspace}:/work",
             "--workdir=/work",
         ]
+        for key, value in (environment or {}).items():
+            command += ["-e", f"{key}={value}"]
         if entrypoint is not None:
             command.append(f"--entrypoint={entrypoint}")
         command += [self._image, *args]
@@ -218,6 +316,8 @@ class LocalDockerExecutor:
     def cancel(self, handle: RunHandle) -> None:
         for phase, _ in PHASES:
             self._kill(f"{handle.container_prefix}-{phase}")
+        self._docker_run(["rm", "-f", f"{handle.container_prefix}-llm"])
+        self._docker_run(["network", "rm", f"{handle.container_prefix}-net"])
 
     def cleanup(self, workspace: Path) -> None:
         # Files written by the sandbox (caches, venvs, symlinks) are removed by the same uid
@@ -242,8 +342,16 @@ class InProcessExecutor:
     """Runs the worker phases on the host. No isolation: tests and trusted development only."""
 
     def launch(
-        self, spec: JobSpec, *, workspace: Path, limits: WorkerLimits, idempotency_key: str
+        self,
+        spec: JobSpec,
+        *,
+        workspace: Path,
+        limits: WorkerLimits,
+        idempotency_key: str,
+        environment: dict[str, str] | None = None,
     ) -> RunResult:
+        import os
+
         handle = RunHandle(idempotency_key, "inprocess")
         result = RunResult(handle=handle)
         started = time.monotonic()
@@ -259,7 +367,16 @@ class InProcessExecutor:
         )
         if prepare.ok:
             started = time.monotonic()
-            report = runner.run_work(workspace)
+            previous = {k: os.environ.get(k) for k in (environment or {})}
+            os.environ.update(environment or {})
+            try:
+                report = runner.run_work(workspace)
+            finally:
+                for key, value in previous.items():
+                    if value is None:
+                        os.environ.pop(key, None)
+                    else:
+                        os.environ[key] = value
             result.phases.append(
                 PhaseResult(
                     "work",

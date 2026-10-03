@@ -30,9 +30,10 @@ aislados** que usan Claude solo cuando hace falta. Jarvis actúa en producción 
 
 ## Estado
 
-Fases 1A (scaffold), 1B (núcleo de seguridad), 2 (GitHub App) y 3 (coding worker en sandbox Docker
-con agente mock) completadas y probadas en real contra un repositorio de prueba: **prototipo local**
-alcanzado. El agente con Claude espera la decisión ADR-005. Siguiente: Fase 4 (Railway). Ver el
+Fases 1A (scaffold), 1B (núcleo de seguridad), 2 (GitHub App) y 3 (coding worker en sandbox Docker)
+completadas y probadas en real contra un repositorio de prueba: **prototipo local** alcanzado. La
+Fase 3b añade el proxy del `LLMGateway` y Claude Code dentro del sandbox (ADR-005 opción A,
+ADR-033), probado en real: Claude arregló un bug del repo de prueba desde la caja. Siguiente: Fase 4 (Railway). Ver el
 [plan de implementación](docs/implementation-plan.md).
 
 Desarrollo local con Docker; producción prevista en Railway.

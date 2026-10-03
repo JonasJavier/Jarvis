@@ -13,17 +13,21 @@ import logging
 import subprocess
 import uuid
 from dataclasses import dataclass
+from datetime import timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from django.conf import settings
+from django.utils import timezone
+
 from audit.services import record
-from budgets.pricing import Usage
-from budgets.services import BudgetError, BudgetGuard, Reservation
+from budgets.services import BudgetError, BudgetGuard
 from integrations.github.host import ChangeSet, FileChange
 from jobs.executor import RunResult, WorkerExecutor
 from jobs.models import Job, JobRun, JobRunStatus
 from jobs.services import JobError, finish_run, start_run
+from llm.proxy import new_run_token
 from policies.actions import DEPLOY_ACTIONS, Action, Actor
 from policies.engine import PolicyEngine
 from policies.models import GlobalPolicy
@@ -182,19 +186,33 @@ def run_job(
     """Execute one attempt of `job`. The job must be `queued`."""
     project = job.project
     run = start_run(job)
+    run_token, token_hash = new_run_token()
+    JobRun.objects.filter(pk=run.pk).update(
+        proxy_token_hash=token_hash,
+        proxy_token_expires_at=timezone.now()
+        + timedelta(seconds=project.contract_policy.agent_timeout_seconds + 300),
+    )
+    environment = {
+        "ANTHROPIC_API_KEY": run_token,  # a run-scoped capability for the proxy, not a real key
+        "ANTHROPIC_MODEL": settings.JARVIS_LLM_MODELS["coding"],
+        "ANTHROPIC_DEFAULT_HAIKU_MODEL": settings.JARVIS_LLM_MODELS["cheap"],
+        "ANTHROPIC_SMALL_FAST_MODEL": settings.JARVIS_LLM_MODELS["cheap"],
+    }
     workspace = workspace_root / f"run-{run.pk}-{uuid.uuid4().hex[:8]}"
     workspace.mkdir(parents=True, exist_ok=False)
     workspace.chmod(0o777)  # the sandbox user (uid 1000) must be able to write
-    reservation: Reservation | None = None
     result: RunResult | None = None
     try:
-        reservation = guard.reserve(
+        # Probe, don't hold: the proxy reserves per model call against this run's own scope
+        # (`max_ai_usd_per_run`), so holding the whole cap here would starve the agent.
+        probe = guard.reserve(
             Decimal(str(project.contract_policy.budget_max_ai_usd_per_run)),
             project=project,
             job_run=run,
-            purpose="job:run",
+            purpose="job:budget_probe",
             correlation_id=job.correlation_id,
         )
+        guard.release(probe)
         token = broker.worker_token(job)
         connection = broker.connection_for(project)
         repo_dir = workspace / "repo"
@@ -223,25 +241,15 @@ def run_job(
             },
         )
         result = executor.launch(
-            spec, workspace=workspace, limits=spec.limits, idempotency_key=run.idempotency_key
+            spec,
+            workspace=workspace,
+            limits=spec.limits,
+            idempotency_key=run.idempotency_key,
+            environment=environment,
         )
         report = result.report
-        cost = Decimal(report.cost_usd) if report is not None else Decimal("0")
-        if cost > 0:
-            guard.reconcile(
-                reservation,
-                Usage(provider="fake", service="llm", model=agent.kind),
-                cost_usd=cost,
-                project=project,
-                job_run=run,
-                correlation_id=job.correlation_id,
-            )
-        else:
-            guard.release(reservation)
-        reservation = None
-
         if report is not None:
-            _record_report(run, agent.kind, report, cost)
+            _record_report(run, agent.kind, report)
         if result.timed_out:
             finish_run(run, JobRunStatus.TIMED_OUT, error="time limit reached")
             return RunOutcome(run, result)
@@ -273,18 +281,14 @@ def run_job(
         finish_run(run, JobRunStatus.FAILED, error=f"budget: {exc}"[:500])
         return RunOutcome(run, result)
     except (OrchestrationError, JobError, Exception) as exc:
-        if reservation is not None:
-            guard.release(reservation)
-            reservation = None
         finish_run(run, JobRunStatus.FAILED, error=f"{type(exc).__name__}: {exc}"[:500])
         return RunOutcome(run, result)
     finally:
-        if reservation is not None:
-            guard.release(reservation)
         _destroy(workspace, executor, job)
 
 
-def _record_report(run: JobRun, agent_kind: str, report: Any, cost: Decimal) -> None:
+def _record_report(run: JobRun, agent_kind: str, report: Any) -> None:
+    # `cost_usd` is accumulated by the LLM proxy from real usage; the report never sets it.
     JobRun.objects.filter(pk=run.pk).update(
         agent_kind=agent_kind,
         turns=report.turns,
@@ -293,7 +297,6 @@ def _record_report(run: JobRun, agent_kind: str, report: Any, cost: Decimal) -> 
         tests_passed=None if report.tests is None else report.tests.ok,
         test_output=(report.tests.output if report.tests else "")[-MAX_TEST_OUTPUT:],
         summary=report.summary[:2000],
-        cost_usd=cost,
     )
     run.refresh_from_db()
 

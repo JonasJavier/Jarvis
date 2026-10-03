@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from tests.conftest import BUGGY_PROJECT, UNITTEST_COMMANDS, git
-from workers.coder.agent import AgentUnavailable, MockCodingAgent, build_agent
+from workers.coder.agent import AgentUnavailable, ClaudeCodeAgent, MockCodingAgent, build_agent
 from workers.coder.job_spec import AgentConfig, AgentReport, Commands, JobSpec, WorkerLimits
 from workers.coder.runner import export_changes, run_prepare, run_work
 from workers.coder.tools import (
@@ -223,12 +223,11 @@ def test_mock_agent_fixes_the_bug_and_runs_tests(worktree: Path, tools: Worktree
     assert tools.last_output.strip().endswith("OK")
 
 
-def test_unknown_agents_are_unavailable() -> None:
-    with pytest.raises(AgentUnavailable, match="ADR-005"):
-        build_agent(AgentConfig(kind="claude_code"))
+def test_agent_registry() -> None:
     with pytest.raises(AgentUnavailable):
         build_agent(AgentConfig(kind="gpt"))
     assert isinstance(build_agent(AgentConfig(kind="mock")), MockCodingAgent)
+    assert isinstance(build_agent(AgentConfig(kind="claude_code")), ClaudeCodeAgent)
 
 
 def write_workspace(tmp_path: Path, repo_files: dict[str, str], spec: JobSpec) -> Path:

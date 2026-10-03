@@ -44,7 +44,7 @@ implementan detrás de `Protocol`s con implementaciones fake/locales. Las Fases 
 credencial real.
 
 ## ADR-005 — Credencial de Claude para workers
-**Estado:** Pendiente (Fase 3)
+**Estado:** Aceptada (2026-10-02): opción A, con Claude Code dentro del sandbox apuntando al proxy
 
 **Contexto:** la suscripción Max incluye Claude Code; las condiciones de uso de Agent SDK / `claude -p`
 con suscripción han cambiado durante 2026. La API usa créditos prepagados con hard stop.
@@ -60,8 +60,11 @@ por `BudgetGuard` antes de ejecutarse).
 | B. API key inyectada en el sandbox | `ANTHROPIC_API_KEY` en el entorno del contenedor con egress permitido solo al endpoint del modelo. | Más simple; permite usar Claude Code/Agent SDK tal cual. | Una credencial de pago dentro del entorno que ejecuta código no confiable (T2); el presupuesto se controlaría a posteriori; exige allowlist de egress real. |
 | C. Suscripción Max (Claude Code en el host) | Ejecutar `claude -p` en el host del control plane con la sesión del owner. | Sin coste por token adicional. | Las condiciones de uso de la suscripción para automatización han cambiado en 2026 y no está claro que permitan uso desatendido; sin medición de coste real en `UsageLedger`; rompe el aislamiento (el agente correría fuera del sandbox). |
 
-Recomendación: **A**. Decisión del owner pendiente; `agent.kind = "claude_code"` devuelve
-`AgentUnavailable` hasta entonces.
+**Decisión del owner (2026-10-02): opción A.** El agente será Claude Code ejecutándose dentro del
+sandbox con `ANTHROPIC_BASE_URL` apuntando al proxy del `LLMGateway` y una clave ficticia; la API key
+real vive solo en el control plane. Claude Code corre con herramientas restringidas (lectura y
+edición del worktree; sin Bash libre; `run_tests`/`run_linter` como herramientas acotadas) y sin
+internet. Se implementa como Fase 3b.
 
 ## ADR-006 — PostgreSQL de producción
 **Estado:** Pendiente (Fase 4)
@@ -368,3 +371,39 @@ token en el entorno del contenedor es legible por cualquier script del repo.
 sandbox). El egress permitido durante `prepare` es amplio: la allowlist real y el aislamiento de
 producción siguen pendientes (ADR-015, Fase 4). El agente con modelo (ADR-005) necesitará un canal
 hacia el `LLMGateway` que no sea red abierta.
+
+## ADR-033 — La ventanilla: proxy del `LLMGateway` y red por ejecución para el agente
+**Estado:** Aceptada (2026-10-02) · implementa la opción A de la ADR-005
+
+**Contexto:** el sandbox no tiene red ni credenciales (ADR-032), pero Claude Code necesita hablar
+con el modelo. En Docker, una red `--internal` no alcanza al host, así que hace falta un camino
+explícito y exclusivo.
+**Decisión:**
+1. **Proxy** `POST /llm/v1/messages` (y `count_tokens`) en el control plane, transparente a la
+   Messages API (streaming incluido). Por petición: resuelve un **token por ejecución** a un
+   `JobRun` activo (solo se guarda el hash; expira con el timeout del run y deja de valer al
+   terminar), aplica un tope de peticiones derivado de `max_turns`, rechaza prompts con secretos
+   configurados, reserva presupuesto con `BudgetGuard` para una cota superior, reenvía a
+   Anthropic con la clave del control plane, concilia el uso real (tokens de entrada, salida y
+   caché) en `UsageLedger` y `JobRun.cost_usd`, y audita (`llm.proxy.*`). Un modelo sin tarifa en
+   `pricing/pricing.yaml` se rechaza.
+2. **Red por ejecución:** la fase `work` corre en una red Docker `--internal` cuyo único otro
+   miembro es un contenedor **reenviador** (`workers/coder/forward.py`, stdlib, imagen del worker,
+   sin capabilities, rootfs de solo lectura) conectado además a `bridge` y que reenvía su puerto a
+   un único destino: el proxy (`JARVIS_LLM_PROXY_TARGET`). El worker recibe
+   `ANTHROPIC_BASE_URL=http://<reenviador>:8080/llm` y `ANTHROPIC_API_KEY=<token del run>`; no puede
+   alcanzar nada más. Sin `ANTHROPIC_API_KEY` en el control plane no hay red en absoluto.
+3. **Claude Code dentro del sandbox** (`ClaudeCodeAgent`): modo `-p` con la tarea por stdin,
+   `--output-format json`, `--max-turns` del manifest, herramientas de archivos permitidas, `Bash`
+   denegado salvo los comandos exactos de test/lint del manifest, rutas protegidas denegadas en sus
+   permisos y de nuevo en la exportación del runner y en el guard del broker; telemetría,
+   autoactualización y tráfico no esencial desactivados. El veredicto de los tests sigue siendo del
+   runner, no del agente.
+4. Modelos por rol en configuración (`JARVIS_LLM_MODEL_CODING` → `ANTHROPIC_MODEL`,
+   `JARVIS_LLM_MODEL_CHEAP` → modelo pequeño de Claude Code). Por defecto `claude-opus-5-5` y
+   `claude-haiku-4-5`, con tarifas en el catálogo.
+**Consecuencias:** cumple las reglas 2, 6, 10 y 12 de CLAUDE.md con el mismo Claude Code que usa el
+owner; el único valor que un script malicioso podría leer en el sandbox es un token que solo sirve
+para gastar el presupuesto de ese run a través del proxy, y ese gasto está acotado por run, día y
+mes. Coste: un contenedor y una red extra por ejecución, y el proxy añade una pasada de parseo de
+SSE. La prueba real con Claude requiere `ANTHROPIC_API_KEY` en el `.env` del control plane.

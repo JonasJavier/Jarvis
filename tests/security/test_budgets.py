@@ -129,7 +129,7 @@ def test_reconcile_writes_ledger_and_moves_reserved_to_spent(
         reservation, USAGE, project=project, job_run=job_run, correlation_id="c1"
     )
     assert entry.cost_usd == USAGE_COST
-    assert entry.pricing_version == "2026.10-fake"
+    assert entry.pricing_version == "2026.10-a"
     assert (entry.client, entry.project, entry.job, entry.job_run) == (
         project.client,
         project,

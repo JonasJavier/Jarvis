@@ -22,7 +22,7 @@ sesión. Los modelos y migraciones son incrementales: cada fase crea solo lo que
 | 1A | Scaffold del control plane | ✅ Completada y revisada | 5–8 h |
 | 1B | Núcleo de seguridad: política, aprobaciones, presupuesto, idempotencia | ✅ Completada — pendiente revisión del owner | 10–14 h |
 | 2 | Integración GitHub App | ✅ Completada y probada en real — pendiente revisión del owner | 15–25 h |
-| 3 | Coding worker local (mock → Claude) | ✅ Completada con `MockCodingAgent` y probada en real — `ClaudeCodeAgent` espera la ADR-005 — pendiente revisión del owner | 20–35 h |
+| 3 | Coding worker local (mock → Claude) | ✅ Completada y probada en real, incluida la 3b (proxy + Claude Code en el sandbox) — pendiente revisión del owner | 20–35 h |
 | 4 | Despliegue de Jarvis en producción (Railway) | ⏳ Pendiente — guía recibida ([railway.md](railway.md)) | 8–14 h |
 | 5 | WhatsApp Cloud API | ⏳ Pendiente | 12–20 h |
 | 6 | Aprobaciones, despliegues de clientes y panel | ⏳ Pendiente | 15–25 h |
@@ -297,9 +297,25 @@ migraciones en verde; los tests de Docker se ejecutan donde hay daemon e imagen 
   solo lectura, y un flujo completo con el contenedor real.
 
 **Pendientes detectados (para fases posteriores)**
-- 3b / ADR-005: `ClaudeCodeAgent`. La interfaz y el registro (`build_agent`) existen; falta decidir
-  la credencial y cómo el agente accede al modelo desde un sandbox sin red (ver alternativas en la
-  ADR-005). Hasta entonces `agent.kind = "claude_code"` devuelve `AgentUnavailable`.
+- ~~3b / ADR-005~~ **Hecho (Fase 3b, 2026-10-02, ADR-033):** proxy `/llm/v1/messages` con token por
+  ejecución, tope de peticiones, filtro de secretos, presupuesto y conciliación del uso real
+  (streaming incluido); red interna por ejecución con reenviador exclusivo hacia el proxy;
+  `ClaudeCodeAgent` con Claude Code 2.1.288 instalado en la imagen, herramientas restringidas y
+  tarea por stdin; tarifas de Anthropic en el catálogo; `coder_smoke --agent claude_code`.
+  Verificado: 305 tests (19 nuevos), proxy contra un upstream simulado (JSON y SSE), el contenedor
+  de trabajo alcanza solo al reenviador y no a GitHub ni a Anthropic (test Docker real). **Prueba real (2026-10-02):** con la API key del
+  owner en el control plane (5 USD de crédito prepagado, sin recarga automática), `coder_smoke
+  --agent claude_code` sobre `jarvis-sandbox` hizo que Claude Code (Opus 5.5) arreglara `calc.add`
+  desde dentro del sandbox a través de la ventanilla: PR #4 (2 archivos, añadió tests) y PR #5
+  (solo `calc.py`, tras permitir el comando de tests del manifest por regla `Bash(...)`), ambos en
+  borrador, firmados por la App y con CI en verde. Coste real registrado en `UsageLedger` por
+  petición (4 llamadas, 0.144 USD en el primer run, con tokens de caché contabilizados);
+  `JobRun.cost_usd` acumulado por el proxy; cero reservas activas al terminar. Dos ajustes salieron
+  de la prueba: el orquestador ya no retiene el tope por run (lo reserva el proxy por llamada) y
+  `Bash` no se deniega como herramienta, solo se permiten los comandos exactos del manifest.
+- Claude Code dentro del sandbox: el reparto exacto de herramientas (`Read/Edit/Write/Glob/Grep`,
+  `Bash(<comando del manifest>)`) se ajustará con la primera prueba real; si la CLI cambia los
+  nombres de flags o reglas, el test del binario falso lo detecta.
 - Clasificación del ticket (`risk`, `purpose`) sigue fija en `medium`/`fix`; llega con el triage
   (Fase 5) y alimentará `JobSpec.risk`.
 - Allowlist de egress real (GitHub, modelo, registries) en lugar de "red en `prepare`, nada en

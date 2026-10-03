@@ -31,7 +31,7 @@ def test_llm_cost_uses_every_token_kind(pricing: PriceCatalog) -> None:
     )
     # 3.00 + 1.50 + 0.15 + 0.75
     assert pricing.cost(usage) == Decimal("5.400000")
-    assert pricing.version == "2026.10-fake"
+    assert pricing.version == "2026.10-a"
 
 
 def test_unit_cost(pricing: PriceCatalog) -> None:

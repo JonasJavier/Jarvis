@@ -7,7 +7,7 @@ FROM python:3.13-slim
 COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /usr/local/bin/uv
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends git ca-certificates \
+    && apt-get install -y --no-install-recommends git ca-certificates curl \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --uid 1000 worker \
     # The workspace is a bind mount owned by another uid; mode bits are noise on Windows hosts.
@@ -23,5 +23,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 COPY workers /opt/jarvis/workers
 
 USER worker
+# Claude Code (native build) for the coding agent. It only ever talks to the Jarvis LLM proxy
+# (ANTHROPIC_BASE_URL) with a per-run token; auto-update and telemetry are disabled at runtime.
+RUN curl -fsSL https://claude.ai/install.sh | bash
+ENV PATH="/home/worker/.local/bin:${PATH}"
 WORKDIR /work
 ENTRYPOINT ["python", "-m", "workers.coder.runner", "--work", "/work"]

@@ -158,3 +158,13 @@ JARVIS_REPO_HOST = env("JARVIS_REPO_HOST")  # fake | github
 JARVIS_WORKER_EXECUTOR = env("JARVIS_WORKER_EXECUTOR")  # docker | inprocess
 JARVIS_WORKER_IMAGE = env("JARVIS_WORKER_IMAGE", "jarvis-worker:dev")
 JARVIS_WORKSPACE_ROOT = Path(env("JARVIS_WORKSPACE_ROOT", str(REPO_DIR / ".workspaces")))
+
+# Anthropic access for the control plane only (ADR-005 option A). The sandbox never gets it: the
+# worker reaches the LLM proxy through a forwarder at JARVIS_LLM_PROXY_TARGET (host:port as seen
+# from Docker). Empty key = proxy disabled and the worker runs without model access.
+ANTHROPIC_API_KEY = env("ANTHROPIC_API_KEY", "")
+# Alternative to the inline value: a file outside the repository holding only the key.
+if not ANTHROPIC_API_KEY and (_key_file := env("ANTHROPIC_API_KEY_FILE", "")):
+    ANTHROPIC_API_KEY = Path(_key_file).read_text(encoding="utf-8").strip()
+ANTHROPIC_API_URL = env("ANTHROPIC_API_URL", "https://api.anthropic.com")
+JARVIS_LLM_PROXY_TARGET = env("JARVIS_LLM_PROXY_TARGET", "host.docker.internal:8000")

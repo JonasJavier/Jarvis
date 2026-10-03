@@ -82,7 +82,7 @@ prohibiciones y acciones críticas globales que prevalecen. Detalle en
 | PolicyEngine | `(actor, action, project)` → `autonomous` / `requires_approval` / `forbidden` | No |
 | BudgetGuard | Reservas multi-scope con locking ordenado; circuit breaker (§8) | No |
 | UsageLedger | Registro append-only de consumo real y coste por servicio de pago por uso | No |
-| LLMGateway | Único punto de acceso a modelos; aplica BudgetGuard, registra UsageLedger, routing de modelo | — |
+| LLMGateway | Único punto de acceso a modelos; aplica BudgetGuard, registra UsageLedger, routing de modelo. Expone el **proxy** `/llm/v1/messages` para el agente del sandbox (ADR-033) | — |
 | AI Triage | Clasificar peticiones ambiguas, resumir | Sí (económico) |
 | Agent Orchestrator | Construir `JobSpec`, lanzar worker vía `WorkerExecutor`, recoger resultados | No |
 | Coding Worker | Diagnosticar y modificar código de un único proyecto | Sí |

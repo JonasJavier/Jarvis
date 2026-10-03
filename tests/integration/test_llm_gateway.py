@@ -138,4 +138,4 @@ def test_default_gateway_uses_settings(project: Project) -> None:
         project=project,
     )
     assert result.model == "fake-large"
-    assert result.pricing_version == "2026.10-fake"
+    assert result.pricing_version == "2026.10-a"

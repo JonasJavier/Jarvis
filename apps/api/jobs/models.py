@@ -100,6 +100,10 @@ class JobRun(models.Model):
     tests_passed = models.BooleanField(null=True, blank=True)
     test_output = models.TextField(blank=True)
     summary = models.TextField(blank=True)
+    # Per-run capability for the LLM proxy (ADR-033): only the hash is stored.
+    proxy_token_hash = models.CharField(max_length=64, blank=True, db_index=True)
+    proxy_token_expires_at = models.DateTimeField(null=True, blank=True)
+    proxy_requests = models.PositiveIntegerField(default=0)
 
     class Meta:
         ordering = ["-started_at"]

@@ -24,6 +24,7 @@ from workers.coder.tools import (
     GIT_OPTIONS,
     ToolError,
     WorktreeTools,
+    is_protected,
     run_commands,
     sanitized_env,
 )
@@ -98,6 +99,10 @@ def run_work(work: Path) -> AgentReport:
         report.turns = tools.turns
         report.tool_calls = list(tools.calls)
         report.files = export_changes(repo, work / "home", spec.limits.max_file_mib * MIB)
+        blocked = [f.path for f in report.files if is_protected(f.path, spec.protected_paths)]
+        if blocked:
+            report.error = f"ProtectedPathError: {blocked[0]!r}: protected path"
+            report.succeeded = False
     (work / "result.json").write_text(report.to_json(), encoding="utf-8")
     return report
 

@@ -1,10 +1,11 @@
 # Catálogo de precios versionado (cost-controls.md). Nunca se hardcodean tarifas en el código.
 # Cada entrada de UsageLedger guarda la `version` usada para calcular su coste.
 #
-# Fase 1B: solo el proveedor `fake` (tests y desarrollo). Las tarifas reales de Anthropic
-# (Fase 3) y de Meta WhatsApp (Fase 5) se añaden al activar cada fase, verificadas contra la
-# documentación oficial del proveedor en ese momento.
-version: "2026.10-fake"
+# `fake` es el proveedor de tests y desarrollo. Las tarifas de Anthropic proceden de la tabla de
+# precios de la API de Claude (referencia del 2026-09-25); revisarlas contra
+# https://platform.claude.com/docs/en/about-claude/pricing al cambiar de modelo. Meta WhatsApp
+# llega con la Fase 5.
+version: "2026.10-a"
 
 llm:                              # USD por millón de tokens
   fake:
@@ -23,6 +24,23 @@ llm:                              # USD por millón de tokens
       output_per_mtok: 75.00
       cache_read_per_mtok: 1.50
       cache_write_per_mtok: 18.75
+
+  anthropic:
+    claude-opus-5-5:                # Opus 5.5: entrada 4.00, salida 20.00, lectura de caché 0.20
+      input_per_mtok: 4.00
+      output_per_mtok: 20.00
+      cache_read_per_mtok: 0.20
+      cache_write_per_mtok: 5.00
+    claude-sonnet-5-5:              # Sonnet 5.5: 2.00 / 10.00, lectura de caché 0.20
+      input_per_mtok: 2.00
+      output_per_mtok: 10.00
+      cache_read_per_mtok: 0.20
+      cache_write_per_mtok: 2.50
+    claude-haiku-4-5:               # Haiku 4.5: 1.00 / 5.00
+      input_per_mtok: 1.00
+      output_per_mtok: 5.00
+      cache_read_per_mtok: 0.10
+      cache_write_per_mtok: 1.25
 
 units:                            # USD por unidad (mensaje, llamada)
   fake:
